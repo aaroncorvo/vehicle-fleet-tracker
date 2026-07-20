@@ -60,6 +60,13 @@ is the lens for every feature decision):
 - ✅ TCO rollup screen (TCO tab) + `fixed_costs` table
 - ⏳ **Migration `0002_fixed_costs.sql` must be pasted in the SQL Editor** — until then the
   TCO tab shows a run-migration hint (app handles the missing table gracefully).
+- ✅ Receipt scan/upload feature (Service tab): upload photo/PDF → Supabase Storage
+  (`receipts` bucket) + OCR via `ocr-receipt` edge function (Claude claude-haiku-4-5,
+  vision + structured outputs) → pre-fills the service form → saves linked `receipts` row.
+- ⏳ **Receipt feature needs one-time setup**: (1) paste `0003_receipts.sql` in SQL Editor;
+  (2) deploy `supabase/functions/ocr-receipt/index.ts` (dashboard → Edge Functions →
+  Deploy new function, name `ocr-receipt`, keep Verify JWT ON); (3) set `ANTHROPIC_API_KEY`
+  secret (Edge Functions → Secrets). Until then the Service tab shows a setup hint.
 - ⏳ Signups may still be open — check and disable in dashboard (owner account exists).
 - ⏳ The misplaced BlackOrchid project `dtztfigimyvpnzbqqwzw` (empty, $10/mo) still needs
   dashboard deletion.

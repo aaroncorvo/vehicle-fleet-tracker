@@ -1,39 +1,87 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { fmt } from '../lib/calc.js'
+import { prepareReceiptFile, uploadReceipt, ocrReceipt, receiptUrl, extractionToService } from '../lib/receipts.js'
 
 const COMMON_SERVICES = [
-  'Oil Change', 'Tire Rotation', 'Engine Air Filter', 'Cabin Air Filter',
+  'Oil Change', 'Tire Rotation', 'Tires', 'Engine Air Filter', 'Cabin Air Filter',
   'Brake Pads - Front', 'Brake Pads - Rear', 'Brake Fluid Flush',
   'Transmission Fluid', 'Differential Fluid', 'Transfer Case Fluid',
-  'Coolant', 'Spark Plugs', 'Battery', 'Alignment', 'Inspection', 'Repair', 'Other',
+  'Coolant', 'Spark Plugs', 'Battery', 'Alignment', 'Inspection', 'Repair', 'Parts', 'Other',
 ]
 
-export default function ServiceScreen({ vehicles, serviceLogs, maintItems, refresh, showToast }) {
+export default function ServiceScreen({ vehicles, serviceLogs, maintItems, receipts, receiptsError, refresh, showToast }) {
   const [vid, setVid] = useState(vehicles[0]?.id)
   const [showForm, setShowForm] = useState(false)
+  const [prefill, setPrefill] = useState(null)     // { initial, receipt } from a scan
+  const [scanning, setScanning] = useState(false)
+  const fileRef = useRef(null)
   const vlogs = serviceLogs.filter(s => s.vehicle_id === vid)
   const vehicle = vehicles.find(v => v.id === vid)
   const totalSpend = vlogs.reduce((s, x) => s + Number(x.cost || 0), 0)
+  const vreceipts = (receipts || []).filter(r => r.vehicle_id === vid)
+
+  const scan = async (file) => {
+    if (!file) return
+    setScanning(true)
+    try {
+      const prepared = await prepareReceiptFile(file)
+      // upload and OCR in parallel — neither depends on the other
+      const [path, extracted] = await Promise.all([
+        uploadReceipt(prepared, vid),
+        ocrReceipt(prepared),
+      ])
+      setPrefill({ initial: extractionToService(extracted), receipt: { path, extracted } })
+      setShowForm(true)
+      showToast('RECEIPT READ — REVIEW & SAVE')
+    } catch (e) {
+      showToast('SCAN FAILED: ' + e.message)
+    }
+    setScanning(false)
+  }
+
+  const viewReceipt = async (r) => {
+    try { window.open(await receiptUrl(r.file_path), '_blank') }
+    catch (e) { showToast('ERROR: ' + e.message) }
+  }
 
   return (
     <>
       <div className="vchips">
         {vehicles.map(v => (
-          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => setVid(v.id)}>
+          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => { setVid(v.id); setShowForm(false); setPrefill(null) }}>
             {v.name}
           </button>
         ))}
       </div>
 
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment"
+        style={{ display: 'none' }} onChange={e => { scan(e.target.files[0]); e.target.value = '' }} />
+
       {!showForm && (
-        <button className="btn" onClick={() => setShowForm(true)} style={{ marginBottom: 16 }}>
-          + LOG SERVICE
-        </button>
+        <>
+          <button className="btn" onClick={() => { setPrefill(null); setShowForm(true) }} style={{ marginBottom: 8 }}>
+            + LOG SERVICE
+          </button>
+          <button className="btn2" onClick={() => fileRef.current.click()} disabled={scanning || receiptsError}
+            style={{ marginBottom: 16 }}>
+            {scanning ? 'READING RECEIPT…' : '⌁ SCAN RECEIPT'}
+          </button>
+          {receiptsError && (
+            <div className="note" style={{ marginBottom: 12 }}>
+              Receipt storage not set up — run supabase/migrations/0003_receipts.sql in the SQL
+              Editor and deploy the ocr-receipt edge function, then reload.
+            </div>
+          )}
+        </>
       )}
       {showForm && (
         <ServiceForm vehicle={vehicle} maintItems={maintItems.filter(m => m.vehicle_id === vid)}
-          onDone={async (saved) => { setShowForm(false); if (saved) { showToast('SERVICE LOGGED'); await refresh() } }} />
+          initial={prefill?.initial} receipt={prefill?.receipt}
+          onDone={async (saved) => {
+            setShowForm(false); setPrefill(null)
+            if (saved) { showToast('SERVICE LOGGED'); await refresh() }
+          }} />
       )}
 
       <div className="statgrid">
@@ -43,28 +91,59 @@ export default function ServiceScreen({ vehicles, serviceLogs, maintItems, refre
 
       <div className="section-label">Service History</div>
       {vlogs.length === 0 && <div className="empty">NO SERVICES LOGGED</div>}
-      {vlogs.map(s => (
-        <div className="logrow" key={s.id}>
-          <div className="lmain">
-            <div className="lt">{s.service_type}</div>
-            <div className="ls">
-              {s.serviced_at}{s.odometer ? ' · ' + fmt.num(s.odometer) + ' mi' : ''}
-              {s.shop ? ' · ' + s.shop : ''}{s.parts ? ' · ' + s.parts : ''}
+      {vlogs.map(s => {
+        const receipt = vreceipts.find(r => r.service_log_id === s.id)
+        return (
+          <div className="logrow" key={s.id}>
+            <div className="lmain">
+              <div className="lt">{s.service_type}{receipt && <span style={{ color: 'var(--amber)' }}> ⌁</span>}</div>
+              <div className="ls">
+                {s.serviced_at}{s.odometer ? ' · ' + fmt.num(s.odometer) + ' mi' : ''}
+                {s.shop ? ' · ' + s.shop : ''}{s.parts ? ' · ' + s.parts : ''}
+              </div>
+              {s.notes && <div className="ls">{s.notes}</div>}
+              {receipt && (
+                <div className="ls">
+                  <button className="btn-sm" onClick={() => viewReceipt(receipt)} style={{ marginTop: 4 }}>
+                    VIEW RECEIPT
+                  </button>
+                </div>
+              )}
             </div>
-            {s.notes && <div className="ls">{s.notes}</div>}
+            <div className="lnum">
+              <div className="ln1">{s.cost ? fmt.money0(s.cost) : '—'}</div>
+            </div>
           </div>
-          <div className="lnum">
-            <div className="ln1">{s.cost ? fmt.money0(s.cost) : '—'}</div>
-          </div>
-        </div>
-      ))}
+        )
+      })}
+
+      {vreceipts.some(r => !r.service_log_id) && (
+        <>
+          <div className="section-label">Unlinked Receipts</div>
+          {vreceipts.filter(r => !r.service_log_id).map(r => (
+            <div className="logrow" key={r.id}>
+              <div className="lmain">
+                <div className="lt">{r.vendor || 'Receipt'}</div>
+                <div className="ls">{r.receipt_date || '—'}{r.odometer ? ' · ' + fmt.num(r.odometer) + ' mi' : ''}</div>
+              </div>
+              <div className="lnum">
+                <div className="ln1">{r.total ? fmt.money0(r.total) : '—'}</div>
+                <button className="btn-sm" onClick={() => viewReceipt(r)} style={{ marginTop: 4 }}>VIEW</button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
     </>
   )
 }
 
-function ServiceForm({ vehicle, maintItems, onDone }) {
+function ServiceForm({ vehicle, maintItems, initial, receipt, onDone }) {
   const today = new Date().toISOString().slice(0, 10)
-  const [f, setF] = useState({ serviced_at: today, odometer: '', service_type: 'Oil Change', parts: '', cost: '', shop: 'DIY', notes: '' })
+  const [f, setF] = useState({
+    serviced_at: today, odometer: '', service_type: 'Oil Change', parts: '', cost: '', shop: 'DIY', notes: '',
+    ...(initial || {}),
+  })
   const [updateMaint, setUpdateMaint] = useState(true)
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
@@ -91,7 +170,7 @@ function ServiceForm({ vehicle, maintItems, onDone }) {
 
   const save = async () => {
     setBusy(true)
-    const { error } = await supabase.from('service_logs').insert({
+    const { data: row, error } = await supabase.from('service_logs').insert({
       vehicle_id: vehicle.id,
       serviced_at: f.serviced_at,
       odometer: f.odometer ? parseInt(f.odometer) : null,
@@ -100,8 +179,23 @@ function ServiceForm({ vehicle, maintItems, onDone }) {
       cost: f.cost ? parseFloat(f.cost) : null,
       shop: f.shop || null,
       notes: f.notes || null,
-    })
+    }).select('id').single()
     if (error) { setBusy(false); alert(error.message); return }
+
+    // attach the scanned receipt to the service log it produced
+    if (receipt) {
+      const { error: rerr } = await supabase.from('receipts').insert({
+        vehicle_id: vehicle.id,
+        service_log_id: row.id,
+        file_path: receipt.path,
+        vendor: receipt.extracted.vendor,
+        receipt_date: receipt.extracted.receipt_date,
+        total: receipt.extracted.total,
+        odometer: receipt.extracted.odometer,
+        extracted: receipt.extracted,
+      })
+      if (rerr) alert('Service saved, but receipt link failed: ' + rerr.message)
+    }
 
     // roll the maintenance baseline forward
     if (updateMaint && matched) {
@@ -116,10 +210,16 @@ function ServiceForm({ vehicle, maintItems, onDone }) {
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
+      {receipt && (
+        <div className="note" style={{ marginBottom: 10, color: 'var(--amber)' }}>
+          ⌁ Receipt attached — fields below were read from it. Review before saving.
+        </div>
+      )}
       <div className="field">
         <label>Service Type</label>
         <select value={f.service_type} onChange={e => set('service_type', e.target.value)}>
-          {COMMON_SERVICES.map(s => <option key={s}>{s}</option>)}
+          {(COMMON_SERVICES.includes(f.service_type) ? COMMON_SERVICES : [f.service_type, ...COMMON_SERVICES])
+            .map(s => <option key={s}>{s}</option>)}
         </select>
       </div>
       <div className="frow">
