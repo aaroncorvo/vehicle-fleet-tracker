@@ -67,6 +67,15 @@ is the lens for every feature decision):
   (2) deploy `supabase/functions/ocr-receipt/index.ts` (dashboard → Edge Functions →
   Deploy new function, name `ocr-receipt`, keep Verify JWT ON); (3) set `ANTHROPIC_API_KEY`
   secret (Edge Functions → Secrets). Until then the Service tab shows a setup hint.
+- ✅ Migrations 0002 (fixed_costs) and 0003 (receipts + bucket) applied; ocr-receipt edge
+  function deployed with ANTHROPIC_API_KEY secret set. Verified via REST probe.
+- ✅ Vehicle profiles (Fleet tab → tap a card): photo gallery (`vehicle-photos` bucket +
+  `vehicle_photos` table), primary driver / plate / color / purchase info / specs notes.
+- ⏳ **Migration `0004_vehicle_profiles.sql` must be pasted in the SQL Editor** — until then
+  the detail view shows a setup hint for photos and profile saves fail on new columns.
+- ⏳ Local dev note: `.env` does not exist yet in the working copy — without it,
+  `npm run build` statically compiles to the config-missing screen (tiny bundle, no app).
+  Netlify has the env vars, so deploys are unaffected.
 - ⏳ Signups may still be open — check and disable in dashboard (owner account exists).
 - ⏳ The misplaced BlackOrchid project `dtztfigimyvpnzbqqwzw` (empty, $10/mo) still needs
   dashboard deletion.
