@@ -1,5 +1,5 @@
 {
-  "name": "fleet-tracker",
+  "name": "vehicle-fleet-tracker",
   "private": true,
   "version": "1.0.0",
   "type": "module",

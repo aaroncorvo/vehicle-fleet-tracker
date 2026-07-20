@@ -1,4 +1,4 @@
-# CLAUDE.md — Ghost Fleet Tracker
+# CLAUDE.md — Vehicle Fleet Tracker
 
 Project context for Claude Code. Read this fully before making changes.
 
@@ -18,8 +18,8 @@ is the lens for every feature decision):
 ## Stack & live endpoints
 
 - **Frontend:** Vite + React 18, no router (tab state), no UI framework — hand-rolled CSS design system
-- **Hosting:** Netlify — site `ghost-fleet-tracker`, siteId `6ff87f52-dc66-4b89-8ab8-b05fb9788a4a`
-  - Live: https://ghost-fleet-tracker.netlify.app
+- **Hosting:** Netlify — site `vehicle-fleet-tracker`, siteId `6ff87f52-dc66-4b89-8ab8-b05fb9788a4a`
+  - Live: https://vehicle-fleet-tracker.netlify.app
 - **Backend:** Supabase — project ref `fxycfrtycqxdlhrpfeiv` (user's PERSONAL account)
   - URL: https://fxycfrtycqxdlhrpfeiv.supabase.co
   - Auth: email/password, single user. After the owner registered, public signups should be
@@ -51,7 +51,7 @@ is the lens for every feature decision):
 
 ## Current state (as of 2026-07-20)
 
-- ✅ App deployed and serving at ghost-fleet-tracker.netlify.app
+- ✅ App deployed and serving at vehicle-fleet-tracker.netlify.app
 - ✅ Auth works; user has an account
 - ⏳ **Schema migration may not be applied yet** — `supabase/migrations/0001_init.sql` must be
   run in the SQL Editor of project `fxycfrtycqxdlhrpfeiv`. Verify with:
