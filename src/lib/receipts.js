@@ -1,36 +1,16 @@
 import { supabase } from './supabase.js'
+import { downscaleImage, blobToBase64 } from './images.js'
 
 // Downscale images before OCR/upload: receipts photographed at 12MP waste
 // tokens and storage. ~1600px long edge is plenty for receipt text.
 const MAX_EDGE = 1600
-
-async function downscaleImage(file) {
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
-  if (scale === 1 && file.type === 'image/jpeg') return file
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(bitmap.width * scale)
-  canvas.height = Math.round(bitmap.height * scale)
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
-  return blob
-}
-
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(r.result.split(',')[1])
-    r.onerror = reject
-    r.readAsDataURL(blob)
-  })
-}
 
 // Normalize the file once: returns { blob, mediaType, ext }
 export async function prepareReceiptFile(file) {
   if (file.type === 'application/pdf') {
     return { blob: file, mediaType: 'application/pdf', ext: 'pdf' }
   }
-  const blob = await downscaleImage(file)
+  const blob = await downscaleImage(file, MAX_EDGE)
   return { blob, mediaType: 'image/jpeg', ext: 'jpg' }
 }
 
