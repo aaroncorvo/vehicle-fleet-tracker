@@ -6,8 +6,9 @@ import FuelScreen from './components/FuelScreen.jsx'
 import ServiceScreen from './components/ServiceScreen.jsx'
 import MaintenanceScreen from './components/MaintenanceScreen.jsx'
 import DataScreen from './components/DataScreen.jsx'
+import TcoScreen from './components/TcoScreen.jsx'
 
-const TABS = ['Fleet', 'Fuel', 'Service', 'Maint', 'Data']
+const TABS = ['Fleet', 'Fuel', 'Service', 'Maint', 'TCO', 'Data']
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -17,6 +18,8 @@ export default function App() {
   const [fuelLogs, setFuelLogs] = useState([])
   const [serviceLogs, setServiceLogs] = useState([])
   const [maintItems, setMaintItems] = useState([])
+  const [fixedCosts, setFixedCosts] = useState([])
+  const [fixedCostsError, setFixedCostsError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
@@ -37,16 +40,19 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [v, f, s, m] = await Promise.all([
+    const [v, f, s, m, fc] = await Promise.all([
       supabase.from('vehicles').select('*').eq('archived', false).order('sort_order'),
       supabase.from('fuel_logs').select('*').order('odometer'),
       supabase.from('service_logs').select('*').order('serviced_at', { ascending: false }),
       supabase.from('maintenance_items').select('*').order('name'),
+      supabase.from('fixed_costs').select('*').order('name'),
     ])
     setVehicles(v.data || [])
     setFuelLogs(f.data || [])
     setServiceLogs(s.data || [])
     setMaintItems(m.data || [])
+    setFixedCosts(fc.data || [])
+    setFixedCostsError(!!fc.error)   // table missing until migration 0002 is applied
     setLoading(false)
   }, [])
 
@@ -79,6 +85,7 @@ export default function App() {
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :
+          tab === 'TCO' ? <TcoScreen {...commonProps} fixedCosts={fixedCosts} fixedCostsError={fixedCostsError} /> :
           <DataScreen {...commonProps} />
         )}
       </div>

@@ -107,6 +107,43 @@ export function tco(vehicle, fuelLogs, serviceLogs) {
   }
 }
 
+// Annualized total of a vehicle's fixed costs (insurance, registration, ...)
+export function fixedCostsAnnual(fixedCosts, vehicleId) {
+  return fixedCosts
+    .filter(c => c.vehicle_id === vehicleId)
+    .reduce((s, c) => s + Number(c.amount) * (c.period === 'month' ? 12 : 1), 0)
+}
+
+// Full TCO rollup: fuel + service + fixed, normalized to $/mile.
+// - fuelCPM comes from fuelStats (avg $/gal ÷ aggregate MPG)
+// - svcCPM spreads service spend over the observed fuel-log miles
+// - fixedCPM spreads annualized fixed costs over the observed miles/year rate
+// Components can be null independently when there isn't enough data; totals
+// sum whatever is available so the number firms up as history accumulates.
+export function tcoRollup(vehicle, fuelLogs, serviceLogs, fixedCosts) {
+  const fs = fuelStats(fuelLogs, vehicle.id)
+  const svcSpend = serviceLogs
+    .filter(s => s.vehicle_id === vehicle.id)
+    .reduce((s, x) => s + Number(x.cost || 0), 0)
+  const fixedAnnual = fixedCostsAnnual(fixedCosts, vehicle.id)
+
+  const miles = fs?.miles || 0
+  const milesPerYear = fs?.milesPerYear || null
+  const fuelCPM = fs?.costPerMile ?? null
+  const svcCPM = miles > 0 ? svcSpend / miles : null
+  const fixedCPM = (milesPerYear && fixedAnnual > 0) ? fixedAnnual / milesPerYear : null
+
+  const parts = [fuelCPM, svcCPM, fixedCPM].filter(v => v != null)
+  const totalCPM = parts.length ? parts.reduce((a, b) => a + b, 0) : null
+  const annualEst = (totalCPM != null && milesPerYear) ? totalCPM * milesPerYear : null
+
+  return {
+    fuelSpend: fs?.totalSpend || 0, svcSpend, fixedAnnual,
+    miles, milesPerYear,
+    fuelCPM, svcCPM, fixedCPM, totalCPM, annualEst,
+  }
+}
+
 // ===== formatting =====
 export const fmt = {
   money: v => v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),

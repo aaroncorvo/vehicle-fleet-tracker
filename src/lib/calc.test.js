@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tco } from './calc.js'
+import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tco, fixedCostsAnnual, tcoRollup } from './calc.js'
 import { seedFuel } from './seed.js'
 
 // Build fuel logs from the real seed data so the tests regress against the
@@ -122,5 +122,53 @@ describe('tco', () => {
     expect(t.miles).toBe(1061)
     // cost/mi excludes the baseline fill's cost (it bought no logged miles)
     expect(t.costPerMile).toBeCloseTo((397.01 + 100 - 65.46) / 1061, 4)
+  })
+})
+
+describe('fixedCostsAnnual', () => {
+  const costs = [
+    { vehicle_id: 'gx460', name: 'Insurance', amount: 120, period: 'month' },
+    { vehicle_id: 'gx460', name: 'Registration', amount: 76.25, period: 'year' },
+    { vehicle_id: 'is350', name: 'Insurance', amount: 90, period: 'month' },
+  ]
+
+  it('annualizes monthly and yearly amounts per vehicle', () => {
+    expect(fixedCostsAnnual(costs, 'gx460')).toBeCloseTo(120 * 12 + 76.25, 2)
+    expect(fixedCostsAnnual(costs, 'is350')).toBe(1080)
+    expect(fixedCostsAnnual(costs, 'fj80')).toBe(0)
+  })
+})
+
+describe('tcoRollup — the keep-vs-replace number', () => {
+  const svc = [{ vehicle_id: 'gx460', cost: 250 }]
+  const costs = [{ vehicle_id: 'gx460', name: 'Insurance', amount: 1200, period: 'year' }]
+
+  it('combines fuel, service, and fixed $/mi components', () => {
+    const t = tcoRollup({ id: 'gx460' }, logs, svc, costs)
+    expect(t.fuelCPM).toBeCloseTo(0.306, 3)
+    expect(t.svcCPM).toBeCloseTo(250 / 1061, 4)
+    // fixed $/mi = annual fixed ÷ observed miles/yr rate
+    expect(t.fixedCPM).toBeCloseTo(1200 / t.milesPerYear, 6)
+    expect(t.totalCPM).toBeCloseTo(t.fuelCPM + t.svcCPM + t.fixedCPM, 6)
+    expect(t.annualEst).toBeCloseTo(t.totalCPM * t.milesPerYear, 4)
+  })
+
+  it('miles/yr annualization from the GX460 21-day window is ~18.4k', () => {
+    const t = tcoRollup({ id: 'gx460' }, logs, [], [])
+    // 1061 mi over 21 days (Jun 26 → Jul 17) × 365.25
+    expect(t.milesPerYear).toBeCloseTo(1061 / 21 * 365.25, 1)
+  })
+
+  it('degrades gracefully with no data', () => {
+    const t = tcoRollup({ id: 'fj80-x' }, [], [], [])
+    expect(t.totalCPM).toBeNull()
+    expect(t.annualEst).toBeNull()
+    expect(t.fixedAnnual).toBe(0)
+  })
+
+  it('fixed-only vehicle still reports fixedAnnual without a CPM', () => {
+    const t = tcoRollup({ id: 'is350' }, [], [], [{ vehicle_id: 'is350', name: 'Insurance', amount: 100, period: 'month' }])
+    expect(t.fixedAnnual).toBe(1200)
+    expect(t.fixedCPM).toBeNull()   // no miles/yr rate yet
   })
 })

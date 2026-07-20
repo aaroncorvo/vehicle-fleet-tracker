@@ -49,19 +49,23 @@ is the lens for every feature decision):
    (user pastes) or the Supabase MCP/CLI if authenticated to the personal account.
 4. **Never bake the service_role key into the frontend.** Publishable key only.
 
-## Current state (as of 2026-07-20)
+## Current state (as of 2026-07-20, evening)
 
 - ✅ App deployed and serving at vehicle-fleet-tracker.netlify.app
 - ✅ Auth works; user has an account
-- ⏳ **Schema migration may not be applied yet** — `supabase/migrations/0001_init.sql` must be
-  run in the SQL Editor of project `fxycfrtycqxdlhrpfeiv`. Verify with:
-  `curl "https://fxycfrtycqxdlhrpfeiv.supabase.co/rest/v1/vehicles?select=id&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY"`
-  → PGRST205 error means NOT applied; `[]` or rows means applied.
-- ⏳ Seed data not yet loaded (blocked on schema). App's empty state shows "Load My Fleet"
-  button which seeds from `src/lib/seed.js`.
-- ⏳ Repo not yet pushed to GitHub (was handed off as a git bundle). After pushing, link the
-  repo to the Netlify site for CI auto-deploys.
-- ⏳ Signups may still be open — check and disable after confirming the owner's account works.
+- ✅ Schema `0001_init.sql` applied to `fxycfrtycqxdlhrpfeiv` (verified via REST probe)
+- ✅ Repo on GitHub: https://github.com/aaroncorvo/vehicle-fleet-tracker (branch `main`),
+  linked to Netlify → push auto-deploys. GitHub Actions CI runs `npm test` + `npm run build`.
+- ✅ `npm test` — vitest regression suite for calc.js (21 tests incl. the verified GX460 values)
+- ✅ TCO rollup screen (TCO tab) + `fixed_costs` table
+- ⏳ **Migration `0002_fixed_costs.sql` must be pasted in the SQL Editor** — until then the
+  TCO tab shows a run-migration hint (app handles the missing table gracefully).
+- ⏳ Signups may still be open — check and disable in dashboard (owner account exists).
+- ⏳ The misplaced BlackOrchid project `dtztfigimyvpnzbqqwzw` (empty, $10/mo) still needs
+  dashboard deletion.
+- Local dev: repo lives at `~/Documents/Personal/Cars/FleetTracker/vehicle-fleet-tracker`;
+  `.env` has the VITE_ vars (gitignored). Supabase MCP in Claude Code is authenticated to
+  BlackOrchid only — it CANNOT touch the personal project; schema changes go via SQL Editor.
 
 ## Repo map
 
@@ -130,10 +134,9 @@ Instrument-cluster aesthetic. Do not genericize.
 
 ## Roadmap (prioritized, from planning discussion with user)
 
-1. **TCO rollup screen** — fuel + service + fixed costs (insurance, registration, inspection)
-   normalized to $/mile per vehicle; the "keep vs replace" number. Needs a `fixed_costs` table
-   (vehicle_id, name, amount, period) + migration.
-2. **`npm test`** — port the calc.js regression tests (values above) into vitest; add CI.
+1. ~~**TCO rollup screen**~~ DONE — `TcoScreen.jsx` + `tcoRollup()`/`fixedCostsAnnual()` in
+   calc.js + `0002_fixed_costs.sql` (pending SQL Editor paste).
+2. ~~**`npm test`**~~ DONE — `src/lib/calc.test.js`, CI in `.github/workflows/ci.yml`.
 3. **Maintenance forecast** — project due DATES from rolling miles/day rate (he drives
    ~2.5-3k mi/mo; convert mileage thresholds to calendar estimates).
 4. **Tire tracking** — purchase date/mileage, rotation log by position, tread depth by corner,
