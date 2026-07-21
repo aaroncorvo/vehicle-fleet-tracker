@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react'
 import { fmt } from '../lib/calc.js'
 import VehicleDetail from './VehicleDetail.jsx'
 import { DOC_KINDS, uploadDoc, docUrl, deleteDoc, docExpiry, prepareDocFile, ocrDocument, extractionToDocForm } from '../lib/docs.js'
+import ObdPanel from './ObdPanel.jsx'
 
 // Dedicated per-vehicle page: photos, profile fields, glovebox docs, recent work.
 export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, serviceLogs, receipts, photos, photosError, recalls, recallsError, docs, docsError, refresh, showToast, goTab }) {
@@ -23,6 +24,9 @@ export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, service
       ) : (
         <Glovebox vehicle={vehicle} vdocs={vdocs} refresh={refresh} showToast={showToast} />
       )}
+
+      <div className="section-label">OBD-II Link</div>
+      <ObdPanel vehicle={vehicle} />
 
       <div className="section-label">Updates & Repairs</div>
       {recent.length === 0 && (
