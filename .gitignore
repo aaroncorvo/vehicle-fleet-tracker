@@ -4,3 +4,7 @@ dist
 .env
 .env.local
 .DS_Store
+
+# local assistant/tooling state
+.claude/sessions/
+.claude/state/
