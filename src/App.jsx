@@ -166,7 +166,7 @@ export default function App() {
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> : <>
           {VEHICLE_TABS.includes(tab) && <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} />}
           {
-          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} goTab={setTab} /> :
+          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} fixedCosts={fixedCosts} docs={docs} goTab={setTab} /> :
           tab === 'Vehicle' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :

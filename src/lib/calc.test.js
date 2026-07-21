@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tco, fixedCostsAnnual, tcoRollup } from './calc.js'
+import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tco, fixedCostsAnnual, tcoRollup, milesPerDay, forecastMaintenance } from './calc.js'
 import { seedFuel } from './seed.js'
 
 // Build fuel logs from the real seed data so the tests regress against the
@@ -170,5 +170,57 @@ describe('tcoRollup — the keep-vs-replace number', () => {
     const t = tcoRollup({ id: 'is350' }, [], [], [{ vehicle_id: 'is350', name: 'Insurance', amount: 100, period: 'month' }])
     expect(t.fixedAnnual).toBe(1200)
     expect(t.fixedCPM).toBeNull()   // no miles/yr rate yet
+  })
+})
+
+describe('forecastMaintenance — mileage-to-calendar projection', () => {
+  const today = new Date('2026-07-20')
+  const vehicle = { id: 'gx460', base_odometer: 90191 }
+  // seed GX460 history: 1061 mi over 21 days → ~50.5 mi/day
+  const mpd = milesPerDay(logs, 'gx460')
+
+  it('derives the rolling miles/day rate from fuel history', () => {
+    expect(mpd).toBeCloseTo(1061 / 21, 1)
+  })
+
+  it('projects a mile-based interval to a date via the rate', () => {
+    // due in ~505 miles → ~10 days out
+    const item = { id: 'm1', vehicle_id: 'gx460', name: 'Oil', interval_miles: 7500, last_done_miles: 91252 + 505 - 7500 }
+    const [f] = forecastMaintenance([vehicle], logs, [], [item], today)
+    const days = (f.dueDate - today) / 86400000
+    expect(days).toBeGreaterThan(8)
+    expect(days).toBeLessThan(12)
+    expect(f.overdue).toBe(false)
+    expect(f.basis).toContain('mi/day')
+  })
+
+  it('uses the exact calendar date when it is sooner than the mileage projection', () => {
+    const item = { id: 'm2', vehicle_id: 'gx460', name: 'Brake Fluid', interval_miles: 50000, last_done_miles: 91000, interval_months: 1, last_done_date: '2026-06-25' }
+    const [f] = forecastMaintenance([vehicle], logs, [], [item], today)
+    expect(f.basis).toBe('calendar')
+    expect(f.dueDate.toISOString().slice(0, 10)).toBe('2026-07-25')
+  })
+
+  it('pins overdue items to today and sorts them first', () => {
+    const items = [
+      { id: 'a', vehicle_id: 'gx460', name: 'Way out', interval_miles: 7500, last_done_miles: 91000 },
+      { id: 'b', vehicle_id: 'gx460', name: 'Late', interval_miles: 5000, last_done_miles: 85000 },
+    ]
+    const fs = forecastMaintenance([vehicle], logs, [], items, today)
+    expect(fs[0].item.name).toBe('Late')
+    expect(fs[0].overdue).toBe(true)
+    expect(fs[0].dueDate.toISOString().slice(0, 10)).toBe('2026-07-20')
+  })
+
+  it('skips baseline items and vehicles without a usage rate keep calendar-only projections', () => {
+    const noHistory = { id: 'fj', base_odometer: 286589 }
+    const items = [
+      { id: 'c', vehicle_id: 'fj', name: 'No baseline', interval_miles: 4000 },
+      { id: 'd', vehicle_id: 'fj', name: 'Miles only, no rate', interval_miles: 4000, last_done_miles: 286589 },
+      { id: 'e', vehicle_id: 'fj', name: 'Dated', interval_months: 2, last_done_date: '2026-07-01' },
+    ]
+    const fs = forecastMaintenance([noHistory], [], [], items, today)
+    expect(fs).toHaveLength(1)
+    expect(fs[0].item.name).toBe('Dated')
   })
 })

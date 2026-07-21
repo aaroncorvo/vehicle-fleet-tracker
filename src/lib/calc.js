@@ -144,6 +144,42 @@ export function tcoRollup(vehicle, fuelLogs, serviceLogs, fixedCosts) {
   }
 }
 
+// Rolling usage rate from logged fuel history (null until ≥14 days of history)
+export function milesPerDay(fuelLogs, vehicleId) {
+  const fs = fuelStats(fuelLogs, vehicleId)
+  return fs?.milesPerYear ? fs.milesPerYear / 365.25 : null
+}
+
+// Project every tracked interval to a calendar date. Mile-based intervals are
+// converted through the vehicle's rolling miles/day; date-based intervals are
+// exact. Returns entries sorted soonest-first; overdue items pin to today.
+export function forecastMaintenance(vehicles, fuelLogs, serviceLogs, maintItems, today = new Date()) {
+  const out = []
+  for (const v of vehicles) {
+    const odo = currentOdometer(v, fuelLogs, serviceLogs)
+    const mpd = milesPerDay(fuelLogs, v.id)
+    for (const m of maintItems.filter(i => i.vehicle_id === v.id)) {
+      const st = maintenanceStatus(m, odo, today)
+      if (st.status === 'baseline') continue
+      if (st.status === 'overdue') {
+        out.push({ vehicle: v, item: m, st, dueDate: new Date(today), overdue: true, basis: 'overdue now' })
+        continue
+      }
+      let dueDate = null, basis = null
+      if (st.remainDays != null) {
+        dueDate = new Date(today.getTime() + st.remainDays * 86400000)
+        basis = 'calendar'
+      }
+      if (st.remainMiles != null && mpd) {
+        const d = new Date(today.getTime() + (st.remainMiles / mpd) * 86400000)
+        if (!dueDate || d < dueDate) { dueDate = d; basis = `~${Math.round(mpd)} mi/day` }
+      }
+      if (dueDate) out.push({ vehicle: v, item: m, st, dueDate, overdue: false, basis })
+    }
+  }
+  return out.sort((a, b) => a.dueDate - b.dueDate)
+}
+
 // ===== formatting =====
 export const fmt = {
   money: v => v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),

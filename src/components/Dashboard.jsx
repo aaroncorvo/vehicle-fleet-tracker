@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { fuelStats, currentOdometer, maintenanceStatus, fmt } from '../lib/calc.js'
+import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tcoRollup, forecastMaintenance, fmt } from '../lib/calc.js'
 import { photoUrls, primaryPhoto } from '../lib/vehiclePhotos.js'
 import { decodeVin } from '../lib/vin.js'
 
-export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, photos, recalls, setVid, refresh, showToast, goTab }) {
+const DAY = 86400000
+
+export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, fixedCosts, docs, photos, recalls, setVid, refresh, showToast, goTab }) {
   const [thumbs, setThumbs] = useState({})
   const [addOpen, setAddOpen] = useState(false)
 
@@ -20,19 +22,68 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
   let fleetFuel = 0, fleetSvc = 0
   for (const l of fuelLogs) fleetFuel += Number(l.total_cost || 0)
   for (const s of serviceLogs) fleetSvc += Number(s.cost || 0)
+  const openRecalls = (recalls || []).filter(r => r.status === 'open').length
+
+  // Every tracked interval projected to a calendar date, fleet-wide
+  const events = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const maint = forecastMaintenance(vehicles, fuelLogs, serviceLogs, maintItems, today)
+      .map(f => ({
+        date: f.dueDate, overdue: f.overdue,
+        vehicle: f.vehicle, title: f.item.name, basis: f.basis, kind: 'maint',
+      }))
+    const docEvents = (docs || []).filter(d => d.expires_on).map(d => {
+      const date = new Date(d.expires_on + 'T00:00:00')
+      return {
+        date, overdue: date < today,
+        vehicle: vehicles.find(v => v.id === d.vehicle_id) || null,
+        title: `${d.label || d.kind} expires`, basis: d.holder || null, kind: 'doc',
+      }
+    })
+    return [...maint, ...docEvents].sort((a, b) => a.date - b.date)
+  }, [vehicles, fuelLogs, serviceLogs, maintItems, docs])
+
+  const overdueCount = events.filter(e => e.overdue).length
+  const horizon = new Date(Date.now() + 90 * DAY)
+  const upcoming = events.filter(e => !e.overdue && e.date <= horizon)
 
   return (
     <>
       <div className="statgrid">
         <div className="stat"><div className="sv">{fmt.money0(fleetFuel)}</div><div className="sl">Fuel Spend</div></div>
         <div className="stat"><div className="sv">{fmt.money0(fleetSvc)}</div><div className="sl">Service Spend</div></div>
+        <div className="stat"><div className={'sv' + (overdueCount ? ' bad' : '')}>{overdueCount}</div><div className="sl">Overdue</div></div>
+        <div className="stat"><div className={'sv' + (openRecalls ? ' bad' : '')}>{openRecalls}</div><div className="sl">Open Recalls</div></div>
+      </div>
+
+      <div className="section-label">Upcoming — Next 90 Days</div>
+      <div className="card">
+        <MiniCalendar events={events} />
+        {overdueCount > 0 && (
+          <div className="agenda-block">
+            {events.filter(e => e.overdue).map((e, i) => <AgendaRow key={'od' + i} e={e} overdue />)}
+          </div>
+        )}
+        {upcoming.length > 0 ? (
+          <div className="agenda-block">
+            {upcoming.slice(0, 8).map((e, i) => <AgendaRow key={i} e={e} />)}
+            {upcoming.length > 8 && <div className="note" style={{ marginTop: 6 }}>+{upcoming.length - 8} more within 90 days</div>}
+          </div>
+        ) : overdueCount === 0 ? (
+          <div className="note" style={{ marginTop: 10 }}>Nothing due in the next 90 days. Forecast dates come from each vehicle's rolling miles/day.</div>
+        ) : null}
+      </div>
+
+      <div className="section-label">Cost Per Mile — Fleet Comparison</div>
+      <div className="card">
+        <TcoCompare vehicles={vehicles} fuelLogs={fuelLogs} serviceLogs={serviceLogs} fixedCosts={fixedCosts || []} />
       </div>
 
       <div className="section-label">Vehicles</div>
       {vehicles.map(v => {
         const p = primaryPhoto(photos || [], v.id)
-        const openRecalls = (recalls || []).filter(r => r.vehicle_id === v.id && r.status === 'open').length
-        return <VehicleCard key={v.id} v={v} thumb={p ? thumbs[p.file_path] : null} openRecalls={openRecalls}
+        const vRecalls = (recalls || []).filter(r => r.vehicle_id === v.id && r.status === 'open').length
+        return <VehicleCard key={v.id} v={v} thumb={p ? thumbs[p.file_path] : null} openRecalls={vRecalls}
           fuelLogs={fuelLogs} serviceLogs={serviceLogs} maintItems={maintItems}
           onOpen={() => { setVid(v.id); goTab('Vehicle') }} />
       })}
@@ -44,6 +95,116 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
         <button className="btn2" onClick={() => setAddOpen(true)}>+ ADD VEHICLE BY VIN</button>
       )}
     </>
+  )
+}
+
+// Two-month grid: dots mark days with forecast events; red = overdue lands today.
+function MiniCalendar({ events }) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const months = [0, 1].map(off => new Date(today.getFullYear(), today.getMonth() + off, 1))
+
+  // day-key → worst severity ('red' beats 'amber')
+  const marks = {}
+  for (const e of events) {
+    const d = e.overdue ? today : e.date
+    const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    if (e.overdue) marks[k] = 'red'
+    else if (marks[k] !== 'red') marks[k] = 'amber'
+  }
+
+  return (
+    <div className="calwrap">
+      {months.map((m0, mi) => {
+        const label = m0.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        const firstDow = m0.getDay()
+        const daysIn = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate()
+        const cells = [...Array(firstDow).fill(null), ...Array.from({ length: daysIn }, (_, i) => i + 1)]
+        return (
+          <div className="cal" key={mi}>
+            <div className="cal-title">{label}</div>
+            <div className="cal-grid">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={'h' + i} className="cal-dow">{d}</div>)}
+              {cells.map((day, i) => {
+                if (day == null) return <div key={'b' + i} />
+                const isToday = mi === 0 && day === today.getDate()
+                const mark = marks[`${m0.getFullYear()}-${m0.getMonth()}-${day}`]
+                return (
+                  <div key={i} className={'cal-day' + (isToday ? ' today' : '')}>
+                    {day}
+                    {mark && <span className={'cal-dot ' + mark} />}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function AgendaRow({ e, overdue }) {
+  const dstr = overdue ? 'NOW' : e.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+  return (
+    <div className={'agenda-row' + (overdue ? ' overdue' : '')}>
+      <div className="agenda-date">{dstr}</div>
+      <div className="agenda-body">
+        <div className="agenda-title">{e.title}</div>
+        <div className="agenda-meta">
+          {e.vehicle ? e.vehicle.name : 'Fleet'}
+          {e.basis && !overdue ? ` · ${e.basis}` : ''}
+        </div>
+      </div>
+      <span className={'cal-dot big ' + (overdue ? 'red' : 'amber')} />
+    </div>
+  )
+}
+
+// Per-vehicle $/mi rollup with proportional bars + annualized estimate
+function TcoCompare({ vehicles, fuelLogs, serviceLogs, fixedCosts }) {
+  const rows = vehicles.map(v => ({ v, t: tcoRollup(v, fuelLogs, serviceLogs, fixedCosts) }))
+  const max = Math.max(...rows.map(r => r.t.totalCPM || 0), 0)
+  if (max === 0) return <div className="note">Cost-per-mile comparison appears once fuel history spans 14+ days.</div>
+  return (
+    <>
+      {rows.map(({ v, t }) => (
+        <div className="tcorow" key={v.id}>
+          <div className="tcorow-head">
+            <span className="tcorow-name">{v.name}</span>
+            <span className="tcorow-cpm">{t.totalCPM != null ? fmt.cpm(t.totalCPM) + '/mi' : 'no data'}</span>
+            <span className="tcorow-yr">{t.annualEst != null ? fmt.money0(t.annualEst) + '/yr' : t.fixedAnnual ? fmt.money0(t.fixedAnnual) + '/yr fixed' : ''}</span>
+          </div>
+          {t.totalCPM != null && (
+            <div className="tcobar">
+              {t.fuelCPM != null && <div className="seg fuel" style={{ width: (t.fuelCPM / max * 100) + '%' }} />}
+              {t.svcCPM != null && <div className="seg svc" style={{ width: (t.svcCPM / max * 100) + '%' }} />}
+              {t.fixedCPM != null && <div className="seg fixed" style={{ width: (t.fixedCPM / max * 100) + '%' }} />}
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="tcokey">
+        <span><i className="seg fuel" /> FUEL</span>
+        <span><i className="seg svc" /> SERVICE</span>
+        <span><i className="seg fixed" /> FIXED</span>
+      </div>
+    </>
+  )
+}
+
+// Tiny inline MPG sparkline for the vehicle cards
+function Sparkline({ points }) {
+  if (points.length < 2) return null
+  const W = 72, H = 22
+  const min = Math.min(...points), max = Math.max(...points)
+  const X = i => (i / (points.length - 1)) * (W - 4) + 2
+  const Y = v => H - 3 - ((v - min) / (max - min || 1)) * (H - 6)
+  const path = points.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p).toFixed(1)}`).join(' ')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true" style={{ display: 'block' }}>
+      <path d={path} fill="none" stroke="var(--amber)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+      <circle cx={X(points.length - 1)} cy={Y(points[points.length - 1])} r="2.2" fill="var(--amber)" />
+    </svg>
   )
 }
 
@@ -138,6 +299,10 @@ function VehicleCard({ v, thumb, openRecalls, fuelLogs, serviceLogs, maintItems,
     .sort((a, b) => (a.st.status === 'overdue' ? 0 : 1) - (b.st.status === 'overdue' ? 0 : 1))
 
   const annualFuel = (fs?.milesPerYear && fs?.costPerMile) ? fs.milesPerYear * fs.costPerMile : null
+  const mpgMap = computeMpg(fuelLogs)
+  const trend = fuelLogs
+    .filter(l => l.vehicle_id === v.id).sort((a, b) => a.odometer - b.odometer)
+    .map(l => mpgMap.get(l.id)?.mpg).filter(m => m != null)
 
   return (
     <div className="card vcard" onClick={onOpen}>
@@ -160,6 +325,7 @@ function VehicleCard({ v, thumb, openRecalls, fuelLogs, serviceLogs, maintItems,
         <div className="gauge">
           <div className="gv amber">{fmt.mpg(fs?.aggMpg)}</div>
           <div className="gl">Avg MPG</div>
+          {trend.length >= 2 && <Sparkline points={trend.slice(-10)} />}
         </div>
         <div className="gauge">
           <div className="gv">{fmt.cpm(fs?.costPerMile)}</div>

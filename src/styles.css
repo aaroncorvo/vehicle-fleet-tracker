@@ -523,3 +523,70 @@ input[type="checkbox"] {
   color: var(--amber-dim);
   box-shadow: 0 8px 28px -8px rgba(60, 45, 10, 0.3);
 }
+
+/* ===== Fleet dashboard: calendar + agenda + TCO comparison ===== */
+.stat .sv.bad { color: #FF7A73; text-shadow: 0 0 14px rgba(255, 90, 82, 0.35); }
+
+.calwrap { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 480px) { .calwrap { grid-template-columns: 1fr 1fr; } }
+.cal-title {
+  font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase;
+  letter-spacing: 0.14em; font-size: 13px; color: var(--text-dim); margin-bottom: 6px;
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-dow {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9px; text-align: center;
+  color: var(--text-faint); padding: 2px 0;
+}
+.cal-day {
+  position: relative; text-align: center; font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: var(--text-dim); padding: 4px 0 9px; border-radius: 3px;
+}
+.cal-day.today {
+  color: var(--amber); border: 1px solid rgba(255, 176, 0, 0.5);
+  background: rgba(255, 176, 0, 0.07);
+}
+.cal-dot {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 3px;
+  width: 4px; height: 4px; border-radius: 50%;
+}
+.cal-dot.amber { background: var(--amber); box-shadow: 0 0 5px rgba(255, 176, 0, 0.7); }
+.cal-dot.red { background: var(--red); box-shadow: 0 0 5px rgba(255, 77, 77, 0.7); }
+.cal-dot.big { position: static; transform: none; width: 7px; height: 7px; flex: none; }
+
+.agenda-block { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.agenda-row {
+  display: flex; align-items: center; gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.agenda-row:last-child { border-bottom: none; }
+.agenda-date {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--amber);
+  min-width: 52px; letter-spacing: 0.04em;
+}
+.agenda-row.overdue .agenda-date { color: #FF7A73; }
+.agenda-body { flex: 1; min-width: 0; }
+.agenda-title { font-size: 14px; color: var(--text); }
+.agenda-meta { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--text-faint); margin-top: 1px; }
+
+.tcorow { padding: 7px 0; }
+.tcorow-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+.tcorow-name {
+  font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase;
+  letter-spacing: 0.08em; font-size: 14px; color: var(--text); flex: 1;
+}
+.tcorow-cpm { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--amber); }
+.tcorow-yr { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-faint); min-width: 74px; text-align: right; }
+.tcobar {
+  display: flex; height: 8px; border-radius: 2px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+.tcobar .seg.fuel, .tcokey .seg.fuel { background: var(--amber); }
+.tcobar .seg.svc, .tcokey .seg.svc { background: #6EA8FF; }
+.tcobar .seg.fixed, .tcokey .seg.fixed { background: var(--text-faint); }
+.tcokey {
+  display: flex; gap: 16px; margin-top: 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: var(--text-faint);
+}
+.tcokey span { display: flex; align-items: center; gap: 5px; }
+.tcokey i { width: 10px; height: 6px; border-radius: 1px; display: inline-block; }
