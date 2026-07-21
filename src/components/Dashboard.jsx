@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { fuelStats, currentOdometer, maintenanceStatus, fmt } from '../lib/calc.js'
 import { photoUrls, primaryPhoto } from '../lib/vehiclePhotos.js'
-import VehicleDetail from './VehicleDetail.jsx'
 
-export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, photos, photosError, refresh, showToast, goTab }) {
-  const [detailVid, setDetailVid] = useState(null)
+export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, photos, setVid, goTab }) {
   const [thumbs, setThumbs] = useState({})
 
   // one signed-URL batch for the dashboard thumbnails
@@ -14,13 +12,6 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
     photoUrls(primaries).then(m => { if (live) setThumbs(m) }).catch(() => {})
     return () => { live = false }
   }, [photos]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const detailVehicle = vehicles.find(v => v.id === detailVid)
-  if (detailVehicle) {
-    return <VehicleDetail vehicle={detailVehicle} fuelLogs={fuelLogs} serviceLogs={serviceLogs}
-      photos={photos || []} photosError={photosError} refresh={refresh} showToast={showToast}
-      onBack={() => setDetailVid(null)} />
-  }
 
   // Fleet-level totals
   let fleetFuel = 0, fleetSvc = 0
@@ -39,7 +30,7 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
         const p = primaryPhoto(photos || [], v.id)
         return <VehicleCard key={v.id} v={v} thumb={p ? thumbs[p.file_path] : null}
           fuelLogs={fuelLogs} serviceLogs={serviceLogs} maintItems={maintItems}
-          onOpen={() => setDetailVid(v.id)} />
+          onOpen={() => { setVid(v.id); goTab('Profile') }} />
       })}
     </>
   )

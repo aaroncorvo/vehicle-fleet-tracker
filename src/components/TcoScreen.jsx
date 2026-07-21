@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { tcoRollup, fmt } from '../lib/calc.js'
+import VehicleSelect from './VehicleSelect.jsx'
 
-export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts, fixedCostsError, refresh, showToast }) {
-  const [vid, setVid] = useState(vehicles[0]?.id)
+export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts, fixedCostsError, vid, setVid, refresh, showToast }) {
   const [editCost, setEditCost] = useState(null)
   const [adding, setAdding] = useState(false)
   const vehicle = vehicles.find(v => v.id === vid)
@@ -14,13 +14,8 @@ export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts,
 
   return (
     <>
-      <div className="vchips">
-        {vehicles.map(v => (
-          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => { setVid(v.id); setEditCost(null); setAdding(false) }}>
-            {v.name}
-          </button>
-        ))}
-      </div>
+      <VehicleSelect vehicles={vehicles} vid={vid}
+        setVid={id => { setVid(id); setEditCost(null); setAdding(false) }} />
 
       <div className="statgrid">
         <div className="stat"><div className="sv">{fmt.cpm(t.totalCPM)}</div><div className="sl">Total $/mi</div></div>

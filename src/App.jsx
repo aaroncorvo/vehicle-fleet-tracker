@@ -7,13 +7,15 @@ import ServiceScreen from './components/ServiceScreen.jsx'
 import MaintenanceScreen from './components/MaintenanceScreen.jsx'
 import DataScreen from './components/DataScreen.jsx'
 import TcoScreen from './components/TcoScreen.jsx'
+import ProfileScreen from './components/ProfileScreen.jsx'
 
-const TABS = ['Fleet', 'Fuel', 'Service', 'Maint', 'TCO', 'Data']
+const TABS = ['Fleet', 'Profile', 'Fuel', 'Service', 'Maint', 'TCO', 'Data']
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [tab, setTab] = useState('Fleet')
+  const [vid, setVid] = useState(null)          // globally selected vehicle
   const [vehicles, setVehicles] = useState([])
   const [fuelLogs, setFuelLogs] = useState([])
   const [serviceLogs, setServiceLogs] = useState([])
@@ -68,6 +70,11 @@ export default function App() {
 
   useEffect(() => { if (session) refresh() }, [session, refresh])
 
+  // keep the global selection valid as vehicles load/change
+  useEffect(() => {
+    if (vehicles.length && !vehicles.some(v => v.id === vid)) setVid(vehicles[0].id)
+  }, [vehicles, vid])
+
   if (configMissing) return (
     <div className="empty" style={{ paddingTop: '30vh' }}>
       VITE_SUPABASE_URL / VITE_SUPABASE_KEY not set.<br />Configure environment variables and rebuild.
@@ -76,7 +83,7 @@ export default function App() {
   if (!authReady) return <div className="spin" style={{ marginTop: '40vh' }} />
   if (!session) return <AuthGate />
 
-  const commonProps = { vehicles, fuelLogs, serviceLogs, maintItems, refresh, showToast }
+  const commonProps = { vehicles, fuelLogs, serviceLogs, maintItems, vid, setVid, refresh, showToast }
 
   return (
     <>
@@ -91,7 +98,8 @@ export default function App() {
       <div className="wrap">
         {loading ? <div className="spin" /> : (
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> :
-          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} photosError={photosError} goTab={setTab} /> :
+          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} goTab={setTab} /> :
+          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :

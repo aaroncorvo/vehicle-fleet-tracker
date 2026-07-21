@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { fuelStats, currentOdometer, fmt } from '../lib/calc.js'
 import { uploadVehiclePhoto, deleteVehiclePhoto, setPrimaryPhoto, photoUrls } from '../lib/vehiclePhotos.js'
 
-export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, photosError, refresh, showToast, onBack }) {
+export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, photosError, refresh, showToast }) {
   const vphotos = photos.filter(p => p.vehicle_id === vehicle.id)
     .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || a.created_at.localeCompare(b.created_at))
   const [urls, setUrls] = useState({})
@@ -34,8 +34,6 @@ export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, 
 
   return (
     <>
-      <button className="btn-sm" onClick={onBack} style={{ marginBottom: 12 }}>← FLEET</button>
-
       {hero && urls[hero.file_path] && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <img src={urls[hero.file_path]} alt={vehicle.name}

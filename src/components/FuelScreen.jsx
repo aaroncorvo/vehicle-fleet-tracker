@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg, fuelStats, fmt } from '../lib/calc.js'
+import VehicleSelect from './VehicleSelect.jsx'
 
-export default function FuelScreen({ vehicles, fuelLogs, refresh, showToast }) {
-  const [vid, setVid] = useState(vehicles[0]?.id)
+export default function FuelScreen({ vehicles, fuelLogs, vid, setVid, refresh, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const mpgMap = useMemo(() => computeMpg(fuelLogs), [fuelLogs])
   const vlogs = fuelLogs.filter(l => l.vehicle_id === vid).sort((a, b) => b.odometer - a.odometer)
@@ -12,13 +12,7 @@ export default function FuelScreen({ vehicles, fuelLogs, refresh, showToast }) {
 
   return (
     <>
-      <div className="vchips">
-        {vehicles.map(v => (
-          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => setVid(v.id)}>
-            {v.name}
-          </button>
-        ))}
-      </div>
+      <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} />
 
       {!showForm && (
         <button className="btn" onClick={() => setShowForm(true)} style={{ marginBottom: 16 }}>

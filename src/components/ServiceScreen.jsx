@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { fmt } from '../lib/calc.js'
 import { prepareReceiptFile, uploadReceipt, ocrReceipt, receiptUrl, extractionToService } from '../lib/receipts.js'
+import VehicleSelect from './VehicleSelect.jsx'
 
 const COMMON_SERVICES = [
   'Oil Change', 'Tire Rotation', 'Tires', 'Engine Air Filter', 'Cabin Air Filter',
@@ -10,8 +11,7 @@ const COMMON_SERVICES = [
   'Coolant', 'Spark Plugs', 'Battery', 'Alignment', 'Inspection', 'Repair', 'Parts', 'Other',
 ]
 
-export default function ServiceScreen({ vehicles, serviceLogs, maintItems, receipts, receiptsError, refresh, showToast }) {
-  const [vid, setVid] = useState(vehicles[0]?.id)
+export default function ServiceScreen({ vehicles, serviceLogs, maintItems, receipts, receiptsError, vid, setVid, refresh, showToast }) {
   const [showForm, setShowForm] = useState(false)
   const [prefill, setPrefill] = useState(null)     // { initial, receipt } from a scan
   const [scanning, setScanning] = useState(false)
@@ -47,13 +47,8 @@ export default function ServiceScreen({ vehicles, serviceLogs, maintItems, recei
 
   return (
     <>
-      <div className="vchips">
-        {vehicles.map(v => (
-          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => { setVid(v.id); setShowForm(false); setPrefill(null) }}>
-            {v.name}
-          </button>
-        ))}
-      </div>
+      <VehicleSelect vehicles={vehicles} vid={vid}
+        setVid={id => { setVid(id); setShowForm(false); setPrefill(null) }} />
 
       <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment"
         style={{ display: 'none' }} onChange={e => { scan(e.target.files[0]); e.target.value = '' }} />

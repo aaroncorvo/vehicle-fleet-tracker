@@ -1,11 +1,11 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { currentOdometer, maintenanceStatus, fmt } from '../lib/calc.js'
+import VehicleSelect from './VehicleSelect.jsx'
 
 const ORDER = { overdue: 0, 'due-soon': 1, baseline: 2, ok: 3 }
 
-export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, maintItems, refresh, showToast }) {
-  const [vid, setVid] = useState(vehicles[0]?.id)
+export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, maintItems, vid, setVid, refresh, showToast }) {
   const [editItem, setEditItem] = useState(null)
   const [adding, setAdding] = useState(false)
   const vehicle = vehicles.find(v => v.id === vid)
@@ -21,13 +21,8 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
 
   return (
     <>
-      <div className="vchips">
-        {vehicles.map(v => (
-          <button key={v.id} className={'vchip' + (v.id === vid ? ' on' : '')} onClick={() => { setVid(v.id); setEditItem(null) }}>
-            {v.name}
-          </button>
-        ))}
-      </div>
+      <VehicleSelect vehicles={vehicles} vid={vid}
+        setVid={id => { setVid(id); setEditItem(null) }} />
 
       <div className="statgrid">
         <div className="stat"><div className="sv">{fmt.num(odo)}</div><div className="sl">Current Odo</div></div>
