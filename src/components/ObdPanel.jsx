@@ -27,11 +27,13 @@ export default function ObdPanel({ vehicle, refresh, showToast }) {
   useEffect(() => stop, [])                    // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { stop() }, [vehicle.id])    // eslint-disable-line react-hooks/exhaustive-deps
 
-  const connect = async () => {
+  const [triedFiltered, setTriedFiltered] = useState(false)
+
+  const connect = async (allDevices = false) => {
     setState('connecting'); setErr(null)
     try {
       const conn = new ObdConnection()
-      const name = await conn.connect()
+      const name = await conn.connect(allDevices)
       connRef.current = conn
       setDeviceName(name)
       setState('live')
@@ -44,8 +46,14 @@ export default function ObdPanel({ vehicle, refresh, showToast }) {
         busy = false
       }, 1200)
     } catch (e) {
-      setErr(e.message)
-      setState(e.name === 'NotFoundError' ? 'idle' : 'error')
+      if (e.name === 'NotFoundError') {
+        // chooser closed empty — either cancelled or the dongle didn't advertise
+        setTriedFiltered(true)
+        setState('idle')
+      } else {
+        setErr(e.message)
+        setState('error')
+      }
     }
   }
 
@@ -117,13 +125,23 @@ export default function ObdPanel({ vehicle, refresh, showToast }) {
     <div className="card">
       {state !== 'live' ? (
         <>
-          <button className="btn" onClick={connect} disabled={state === 'connecting'}>
+          <button className="btn" onClick={() => connect(false)} disabled={state === 'connecting'}>
             {state === 'connecting' ? 'CONNECTING…' : '⌁ CONNECT OBD-II DONGLE'}
           </button>
+          {triedFiltered && state === 'idle' && (
+            <>
+              <div style={{ height: 8 }} />
+              <button className="btn2" onClick={() => connect(true)} disabled={state === 'connecting'}>
+                DONGLE NOT LISTED? SHOW ALL BLUETOOTH DEVICES
+              </button>
+            </>
+          )}
           <div className="note" style={{ marginTop: 10 }}>
             Plug a BLE dongle (Vgate iCar Pro BLE, OBDLink CX, Veepeak BLE+) into the
             OBD port, turn the ignition on, then connect. Live data, check-engine
-            code diagnosis, and code clearing.
+            code diagnosis, and code clearing. Bluetooth-Classic dongles (most cheap
+            "Android-only" ELM327s) won't appear — BLE models are usually marked
+            "for iPhone/iOS".
           </div>
           {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
         </>

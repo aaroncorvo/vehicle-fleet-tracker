@@ -83,11 +83,15 @@ export class ObdConnection {
     this.pending = null
   }
 
-  async connect() {
-    this.device = await navigator.bluetooth.requestDevice({
-      filters: OBD_SERVICES.map(s => ({ services: [s] })),
-      optionalServices: OBD_SERVICES,
-    })
+  // allDevices: fallback chooser showing every BLE device in range, for dongles
+  // advertising nonstandard service UUIDs. A Bluetooth-Classic ELM327 will never
+  // appear in either chooser — that's the compatibility tell.
+  async connect(allDevices = false) {
+    this.device = await navigator.bluetooth.requestDevice(
+      allDevices
+        ? { acceptAllDevices: true, optionalServices: OBD_SERVICES }
+        : { filters: OBD_SERVICES.map(s => ({ services: [s] })), optionalServices: OBD_SERVICES },
+    )
     const server = await this.device.gatt.connect()
     // find a service exposing a notify + write pair
     for (const svcId of OBD_SERVICES) {
@@ -99,7 +103,9 @@ export class ObdConnection {
         if (this.notifyChar && this.writeChar) break
       } catch { /* service absent on this dongle; try next */ }
     }
-    if (!this.notifyChar || !this.writeChar) throw new Error('No ELM327 UART service found on this device')
+    if (!this.notifyChar || !this.writeChar) {
+      throw new Error('This device has no ELM327 service — it may be a Bluetooth-Classic dongle (not BLE), which browsers and iPhones cannot use')
+    }
     await this.notifyChar.startNotifications()
     this.notifyChar.addEventListener('characteristicvaluechanged', (e) => {
       this.buffer += new TextDecoder().decode(e.target.value)
