@@ -35,7 +35,7 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
       </div>
 
       {(editItem || adding) ? (
-        <MaintForm item={editItem} vehicleId={vid} currentOdo={odo}
+        <MaintForm item={editItem} vehicleId={vid} ownerId={vehicle?.user_id} currentOdo={odo}
           onDone={async (saved) => {
             setEditItem(null); setAdding(false)
             if (saved) { showToast('SAVED'); await refresh() }
@@ -87,7 +87,7 @@ function StatusLine({ m, st }) {
   return <>{parts}</>
 }
 
-function MaintForm({ item, vehicleId, currentOdo, onDone }) {
+function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
   const [f, setF] = useState({
     name: item?.name || '',
     interval_miles: item?.interval_miles ?? '',
@@ -113,7 +113,7 @@ function MaintForm({ item, vehicleId, currentOdo, onDone }) {
     }
     let error
     if (item) ({ error } = await supabase.from('maintenance_items').update(payload).eq('id', item.id))
-    else ({ error } = await supabase.from('maintenance_items').insert({ ...payload, vehicle_id: vehicleId }))
+    else ({ error } = await supabase.from('maintenance_items').insert({ ...payload, vehicle_id: vehicleId, user_id: ownerId }))
     setBusy(false)
     if (error) { alert(error.message); return }
     onDone(true)

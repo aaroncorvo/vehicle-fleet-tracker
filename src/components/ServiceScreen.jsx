@@ -167,6 +167,7 @@ function ServiceForm({ vehicle, maintItems, initial, receipt, onDone }) {
     setBusy(true)
     const { data: row, error } = await supabase.from('service_logs').insert({
       vehicle_id: vehicle.id,
+      user_id: vehicle.user_id,
       serviced_at: f.serviced_at,
       odometer: f.odometer ? parseInt(f.odometer) : null,
       service_type: f.service_type,
@@ -181,6 +182,7 @@ function ServiceForm({ vehicle, maintItems, initial, receipt, onDone }) {
     if (receipt) {
       const { error: rerr } = await supabase.from('receipts').insert({
         vehicle_id: vehicle.id,
+        user_id: vehicle.user_id,
         service_log_id: row.id,
         file_path: receipt.path,
         vendor: receipt.extracted.vendor,

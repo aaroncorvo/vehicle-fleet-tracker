@@ -5,8 +5,8 @@
   --line: #26262B;
   --line-bright: #3A3A42;
   --text: #E8E6E1;
-  --text-dim: #8B8A85;
-  --text-faint: #55544F;
+  --text-dim: #A8A6A0;
+  --text-faint: #74726B;
   --amber: #FFB000;
   --amber-dim: #B37B00;
   --green: #3DDC84;
@@ -47,7 +47,7 @@ body::before {
   text-transform: uppercase;
 }
 .hdr h1 .tick { color: var(--amber); }
-.hdr .sub { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em; }
+.hdr .sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; }
 .hdr button {
   background: none; border: none; color: var(--text-faint);
   font-family: var(--font-mono); font-size: 11px; cursor: pointer;
@@ -85,7 +85,7 @@ body::before {
 .wrap { padding: 16px; max-width: 760px; margin: 0 auto; }
 .section-label {
   font-family: var(--font-mono);
-  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
   color: var(--text-faint);
   margin: 22px 0 10px;
   display: flex; align-items: center; gap: 10px;
@@ -110,7 +110,7 @@ body::before {
   font-size: 21px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .vcard .vname .nick { color: var(--amber); font-size: 14px; font-style: italic; }
-.vcard .vmeta { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.04em; margin-bottom: 12px; }
+.vcard .vmeta { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.04em; margin-bottom: 12px; }
 .gauges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .gauge { text-align: left; }
 .gauge .gv {
@@ -122,14 +122,14 @@ body::before {
 .gauge .gv.amber { color: var(--amber); }
 .gauge .gl {
   font-family: var(--font-mono);
-  font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--text-faint);
   margin-top: 3px;
 }
 .flagrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
 .flag {
   font-family: var(--font-mono);
-  font-size: 9.5px; letter-spacing: 0.06em;
+  font-size: 10.5px; letter-spacing: 0.06em;
   padding: 3px 7px;
   border-radius: 2px;
   border: 1px solid;
@@ -178,7 +178,7 @@ body::before {
 .field label {
   display: block;
   font-family: var(--font-mono);
-  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--text-faint);
   margin-bottom: 5px;
 }
@@ -233,11 +233,11 @@ body::before {
   gap: 10px;
 }
 .logrow .lmain { min-width: 0; }
-.logrow .lmain .lt { font-size: 15px; font-weight: 600; letter-spacing: 0.03em; }
-.logrow .lmain .ls { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-top: 2px; }
+.logrow .lmain .lt { font-size: 16px; font-weight: 600; letter-spacing: 0.03em; }
+.logrow .lmain .ls { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.55; }
 .logrow .lnum { text-align: right; flex-shrink: 0; }
 .logrow .lnum .ln1 { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--amber); }
-.logrow .lnum .ln2 { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-top: 2px; }
+.logrow .lnum .ln2 { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); margin-top: 2px; }
 
 /* ===== Maintenance ===== */
 .mrow {
@@ -251,8 +251,8 @@ body::before {
 .dot.ok { background: var(--green); }
 .dot.baseline { background: var(--text-faint); }
 .mrow .mmain { flex: 1; min-width: 0; }
-.mrow .mt { font-size: 15px; font-weight: 600; }
-.mrow .ms { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+.mrow .mt { font-size: 16px; font-weight: 600; }
+.mrow .ms { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.6; }
 .mrow .ms .warn { color: var(--red); }
 .mrow .ms .soon { color: var(--amber); }
 
@@ -265,7 +265,7 @@ body::before {
   padding: 12px;
 }
 .stat .sv { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--amber); }
-.stat .sl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); margin-top: 4px; }
+.stat .sl { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); margin-top: 4px; }
 
 /* ===== Auth ===== */
 .auth {
@@ -290,7 +290,7 @@ body::before {
   font-family: var(--font-mono); font-size: 12px; color: var(--text-faint);
   line-height: 2;
 }
-.note { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); line-height: 1.7; }
+.note { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); line-height: 1.7; }
 .toast {
   position: fixed; bottom: calc(84px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   background: var(--panel-2); border: 1px solid var(--amber-dim);

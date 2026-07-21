@@ -81,6 +81,7 @@ function FuelForm({ vehicle, lastOdo, onDone }) {
     setBusy(true)
     const { error } = await supabase.from('fuel_logs').insert({
       vehicle_id: vehicle.id,
+      user_id: vehicle.user_id,   // fleet owner, so shared members write to the same fleet
       filled_at: f.filled_at,
       odometer: parseInt(f.odometer),
       fill_type: f.fill_type,

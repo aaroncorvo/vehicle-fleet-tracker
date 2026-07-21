@@ -4,15 +4,15 @@ import { downscaleImage } from './images.js'
 // Vehicle photos get more resolution than receipts — they're for looking at.
 const MAX_EDGE = 2048
 
-export async function uploadVehiclePhoto(file, vehicleId, makePrimary) {
+export async function uploadVehiclePhoto(file, vehicle, makePrimary) {
   const blob = await downscaleImage(file, MAX_EDGE)
   const { data: { user } } = await supabase.auth.getUser()
-  const path = `${user.id}/${vehicleId}/${Date.now()}.jpg`
+  const path = `${user.id}/${vehicle.id}/${Date.now()}.jpg`
   const { error: uerr } = await supabase.storage.from('vehicle-photos')
     .upload(path, blob, { contentType: 'image/jpeg' })
   if (uerr) throw uerr
   const { error } = await supabase.from('vehicle_photos').insert({
-    vehicle_id: vehicleId, file_path: path, is_primary: !!makePrimary,
+    vehicle_id: vehicle.id, user_id: vehicle.user_id, file_path: path, is_primary: !!makePrimary,
   })
   if (error) throw error
   return path

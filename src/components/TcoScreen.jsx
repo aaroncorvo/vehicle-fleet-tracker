@@ -44,7 +44,7 @@ export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts,
       ) : (
         <>
           {(editCost || adding) ? (
-            <CostForm cost={editCost} vehicleId={vid}
+            <CostForm cost={editCost} vehicleId={vid} ownerId={vehicle.user_id}
               onDone={async (saved) => {
                 setEditCost(null); setAdding(false)
                 if (saved) { showToast('SAVED'); await refresh() }
@@ -85,7 +85,7 @@ function CpmRow({ label, cpm, detail }) {
   )
 }
 
-function CostForm({ cost, vehicleId, onDone }) {
+function CostForm({ cost, vehicleId, ownerId, onDone }) {
   const [f, setF] = useState({
     name: cost?.name || '',
     amount: cost?.amount ?? '',
@@ -105,7 +105,7 @@ function CostForm({ cost, vehicleId, onDone }) {
     }
     let error
     if (cost) ({ error } = await supabase.from('fixed_costs').update(payload).eq('id', cost.id))
-    else ({ error } = await supabase.from('fixed_costs').insert({ ...payload, vehicle_id: vehicleId }))
+    else ({ error } = await supabase.from('fixed_costs').insert({ ...payload, vehicle_id: vehicleId, user_id: ownerId }))
     setBusy(false)
     if (error) { alert(error.message); return }
     onDone(true)

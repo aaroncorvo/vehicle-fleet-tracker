@@ -47,6 +47,31 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
     catch (e) { showToast('ERROR: ' + e.message) }
   }
 
+  // ---- family sharing ----
+  const [members, setMembers] = useState(null)   // null = table missing (migration 0006)
+  const [newMember, setNewMember] = useState('')
+  const [me, setMe] = useState(null)
+  const loadMembers = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setMe(user)
+    const { data, error } = await supabase.from('fleet_members').select('*').order('created_at')
+    setMembers(error ? null : data)
+  }
+  useEffect(() => { loadMembers() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addMember = async () => {
+    const email = newMember.trim().toLowerCase()
+    if (!email || !email.includes('@')) { showToast('ENTER AN EMAIL'); return }
+    const { error } = await supabase.from('fleet_members').insert({ member_email: email })
+    if (error) { showToast('ERROR: ' + error.message); return }
+    setNewMember(''); showToast('MEMBER ADDED'); await loadMembers()
+  }
+  const removeMember = async (m) => {
+    if (!confirm(`Remove ${m.member_email} from the fleet?`)) return
+    await supabase.from('fleet_members').delete().eq('id', m.id)
+    await loadMembers(); showToast('REMOVED')
+  }
+
   const vName = id => vehicles.find(v => v.id === id)?.name || id
 
   const downloadCsv = (rows, filename) => {
@@ -185,6 +210,37 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
               {drive.unavailable
                 ? 'Backup service not deployed yet — see supabase/functions/google-drive + migration 0005.'
                 : 'One-time Google sign-in. Creates a "Fleet Records" folder in your Drive with per-vehicle records, photos, and receipts — refreshed nightly and on demand. The app can only touch files it creates.'}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="section-label">Family Sharing</div>
+      <div className="card">
+        {members === null ? (
+          <div className="note">Sharing not set up yet — run supabase/migrations/0006_family_sharing.sql, then reload.</div>
+        ) : (
+          <>
+            {members.filter(m => m.owner_user_id === me?.id).map(m => (
+              <div className="logrow" key={m.id}>
+                <div className="lmain"><div className="lt" style={{ fontSize: 14, fontFamily: 'var(--font-mono)' }}>{m.member_email}</div></div>
+                <button className="btn-sm danger" onClick={() => removeMember(m)}>REMOVE</button>
+              </div>
+            ))}
+            {members.some(m => m.owner_user_id !== me?.id) && (
+              <div className="note" style={{ margin: '8px 0' }}>
+                You also have access to a fleet shared with you.
+              </div>
+            )}
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>Add family member by email</label>
+              <input type="email" inputMode="email" value={newMember} onChange={e => setNewMember(e.target.value)}
+                placeholder="kary@example.com" onKeyDown={e => e.key === 'Enter' && addMember()} />
+            </div>
+            <button className="btn2" onClick={addMember}>+ ADD MEMBER</button>
+            <div className="note" style={{ marginTop: 10 }}>
+              They create their own account with that exact email (sign-up link on the login screen),
+              and your whole fleet appears for them — entries they add land on the shared fleet.
             </div>
           </>
         )}

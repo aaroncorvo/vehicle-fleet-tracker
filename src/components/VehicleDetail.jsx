@@ -23,7 +23,7 @@ export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, 
     if (!file) return
     setBusy(true)
     try {
-      await uploadVehiclePhoto(file, vehicle.id, vphotos.length === 0)
+      await uploadVehiclePhoto(file, vehicle, vphotos.length === 0)
       showToast('PHOTO ADDED')
       await refresh()
     } catch (e) { showToast('UPLOAD FAILED: ' + e.message) }
