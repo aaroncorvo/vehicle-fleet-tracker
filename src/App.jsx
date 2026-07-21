@@ -3,7 +3,7 @@ import { supabase, configMissing } from './lib/supabase.js'
 import { loadSeed } from './lib/seed.js'
 import { dailyRecallCheck } from './lib/recalls.js'
 import { fetchPlan } from './lib/plan.js'
-import Dashboard from './components/Dashboard.jsx'
+import Dashboard, { AddVehicleForm } from './components/Dashboard.jsx'
 import FuelScreen from './components/FuelScreen.jsx'
 import ServiceScreen from './components/ServiceScreen.jsx'
 import MaintenanceScreen from './components/MaintenanceScreen.jsx'
@@ -214,6 +214,7 @@ export default function App() {
 
 function EmptyFleet({ refresh, showToast }) {
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
   const seed = async () => {
     setBusy(true)
     try {
@@ -225,17 +226,32 @@ function EmptyFleet({ refresh, showToast }) {
       setBusy(false)
     }
   }
+  if (adding) return (
+    <>
+      <div className="section-label">Add Your First Vehicle</div>
+      <AddVehicleForm nextSort={1}
+        onDone={async (saved) => { setAdding(false); if (saved) { showToast('VEHICLE ADDED'); await refresh() } }} />
+    </>
+  )
   return (
     <div className="empty">
-      NO VEHICLES YET
+      WELCOME TO MOTORLOG
+      <div style={{ marginTop: 8 }} className="note">
+        Fuel, service, maintenance, and true cost-per-mile — for your whole fleet.
+      </div>
       <div style={{ marginTop: 24 }}>
-        <button className="btn" onClick={seed} disabled={busy}>
-          {busy ? 'LOADING…' : 'LOAD MY FLEET (4 VEHICLES + HISTORY)'}
+        <button className="btn" onClick={() => setAdding(true)}>
+          + ADD YOUR FIRST VEHICLE BY VIN
         </button>
       </div>
-      <div style={{ marginTop: 14 }} className="note">
-        Loads: GX460 · IS350 · GX470 · Land Cruiser "Ghost"<br />
-        with fuel history and maintenance intervals pre-configured
+      <div style={{ marginTop: 18 }}>
+        <button className="btn2" onClick={seed} disabled={busy}>
+          {busy ? 'LOADING…' : 'LOAD DEMO FLEET'}
+        </button>
+      </div>
+      <div style={{ marginTop: 12 }} className="note">
+        The demo loads a 4-vehicle Toyota/Lexus fleet with fuel history and
+        maintenance intervals so you can explore with real-shaped data.
       </div>
     </div>
   )

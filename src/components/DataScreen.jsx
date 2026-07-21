@@ -4,6 +4,35 @@ import { computeMpg } from '../lib/calc.js'
 import { downscaleImage } from '../lib/images.js'
 import { planStatus } from '../lib/plan.js'
 
+function FeedbackCard({ me, plan, showToast }) {
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  const send = async () => {
+    if (!msg.trim()) return
+    setBusy(true)
+    const { error } = await supabase.from('feedback').insert({
+      email: me?.email || null,
+      message: msg.trim(),
+      context: { ua: navigator.userAgent, tier: plan?.tier || null, when: new Date().toISOString() },
+    })
+    setBusy(false)
+    if (error) { showToast('SEND FAILED — feedback needs migration 0013'); return }
+    setMsg(''); showToast('FEEDBACK SENT — THANK YOU')
+  }
+  return (
+    <div className="card">
+      <div className="field">
+        <label>What's working? What's broken? What's missing?</label>
+        <textarea rows={3} value={msg} onChange={e => setMsg(e.target.value)}
+          placeholder="The MPG chart is great, but I wish…" />
+      </div>
+      <button className="btn2" onClick={send} disabled={busy || !msg.trim()}>
+        {busy ? 'SENDING…' : 'SEND FEEDBACK'}
+      </button>
+    </div>
+  )
+}
+
 export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, theme, setTheme, plan, refresh, showToast }) {
   const fileRef = useRef(null)
   const [importVid, setImportVid] = useState(vehicles[0]?.id)
@@ -494,6 +523,9 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
           </>
         )}
       </div>
+
+      <div className="section-label">Beta Feedback</div>
+      <FeedbackCard me={me} plan={plan} showToast={showToast} />
 
       <div className="section-label">Export</div>
       <div className="card">

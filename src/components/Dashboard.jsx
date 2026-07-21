@@ -227,7 +227,7 @@ function Sparkline({ points }) {
   )
 }
 
-function AddVehicleForm({ ownerId, nextSort, onDone }) {
+export function AddVehicleForm({ ownerId, nextSort, onDone }) {
   const [vin, setVin] = useState('')
   const [decoded, setDecoded] = useState(null)
   const [f, setF] = useState({ name: '', nickname: '', base_odometer: '', fuel_octane: '87 Regular' })
