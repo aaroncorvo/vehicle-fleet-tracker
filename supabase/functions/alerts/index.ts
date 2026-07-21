@@ -39,13 +39,14 @@ function maintStatus(item: any, odo: number, today = new Date()) {
 
 async function buildDigest(ownerId: string) {
   const rows = (q: any) => q.then((r: any) => r.data ?? []);
-  const [vehicles, fuel, svc, maint, recalls] = await Promise.all([
+  const [vehicles, fuel, svc, maint, recalls, docs] = await Promise.all([
     rows(admin.from("vehicles").select("*").eq("user_id", ownerId).eq("archived", false).order("sort_order")),
     rows(admin.from("fuel_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
     rows(admin.from("service_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
     rows(admin.from("maintenance_items").select("*").eq("user_id", ownerId)),
     rows(admin.from("recalls").select("*").eq("user_id", ownerId).eq("status", "open")),
-  ]);
+    rows(admin.from("driver_docs").select("*").eq("user_id", ownerId).not("expires_on", "is", null)),
+  ]).catch(() => [[], [], [], [], [], []]);
 
   const sections: { vehicle: string; lines: string[] }[] = [];
   for (const v of vehicles) {
@@ -66,6 +67,16 @@ async function buildDigest(ownerId: string) {
     }
     if (lines.length) sections.push({ vehicle: `${v.name}${v.nickname ? ` "${v.nickname}"` : ""} @ ${odo.toLocaleString()} mi`, lines });
   }
+
+  // expiring glovebox documents (insurance cards, registration, ...)
+  const docLines: string[] = [];
+  for (const d of docs ?? []) {
+    const days = Math.round((new Date(d.expires_on).getTime() - Date.now()) / 86400000);
+    if (days > 30) continue;
+    const veh = vehicles.find((v: any) => v.id === d.vehicle_id);
+    docLines.push(`${days < 0 ? "OVERDUE" : "DUE SOON"} — ${d.label || d.kind} (${d.holder}${veh ? `, ${veh.name}` : ""}) ${days < 0 ? `expired ${d.expires_on}` : `expires ${d.expires_on}`}`);
+  }
+  if (docLines.length) sections.push({ vehicle: "Documents", lines: docLines });
   return sections;
 }
 

@@ -40,6 +40,8 @@ export default function App() {
   const [photosError, setPhotosError] = useState(false)
   const [recalls, setRecalls] = useState([])
   const [recallsError, setRecallsError] = useState(false)
+  const [docs, setDocs] = useState([])
+  const [docsError, setDocsError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
@@ -60,7 +62,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [v, f, s, m, fc, rc, ph, rec] = await Promise.all([
+    const [v, f, s, m, fc, rc, ph, rec, dd] = await Promise.all([
       supabase.from('vehicles').select('*').eq('archived', false).order('sort_order'),
       supabase.from('fuel_logs').select('*').order('odometer'),
       supabase.from('service_logs').select('*').order('serviced_at', { ascending: false }),
@@ -69,6 +71,7 @@ export default function App() {
       supabase.from('receipts').select('*').order('receipt_date', { ascending: false }),
       supabase.from('vehicle_photos').select('*').order('created_at'),
       supabase.from('recalls').select('*').order('report_date', { ascending: false }),
+      supabase.from('driver_docs').select('*').order('created_at'),
     ])
     setVehicles(v.data || [])
     setFuelLogs(f.data || [])
@@ -82,6 +85,8 @@ export default function App() {
     setPhotosError(!!ph.error)       // table missing until migration 0004 is applied
     setRecalls(rec.data || [])
     setRecallsError(!!rec.error)     // table missing until migration 0007 is applied
+    setDocs(dd.data || [])
+    setDocsError(!!dd.error)         // table missing until migration 0009 is applied
     setLoading(false)
   }, [])
 
@@ -142,7 +147,7 @@ export default function App() {
         {loading ? <div className="spin" /> : (
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> :
           tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} goTab={setTab} /> :
-          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} goTab={setTab} /> :
+          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :
