@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tcoRollup, forecastMaintenance, fmt } from '../lib/calc.js'
 import { photoUrls, primaryPhoto } from '../lib/vehiclePhotos.js'
 import { decodeVin } from '../lib/vin.js'
+import { PartLine } from './MaintenanceScreen.jsx'
 
 const DAY = 86400000
 
@@ -31,6 +32,7 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
       .map(f => ({
         date: f.dueDate, overdue: f.overdue,
         vehicle: f.vehicle, title: f.item.name, basis: f.basis, kind: 'maint',
+        item: f.item,
       }))
     const docEvents = (docs || []).filter(d => d.expires_on).map(d => {
       const date = new Date(d.expires_on + 'T00:00:00')
@@ -144,16 +146,27 @@ function MiniCalendar({ events }) {
 }
 
 function AgendaRow({ e, overdue }) {
+  const [open, setOpen] = useState(false)
   const dstr = overdue ? 'NOW' : e.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+  const hasDetail = e.item && (e.item.parts?.length > 0 || e.item.part_number || e.item.notes)
   return (
-    <div className={'agenda-row' + (overdue ? ' overdue' : '')}>
+    <div className={'agenda-row' + (overdue ? ' overdue' : '') + (hasDetail ? ' expandable' : '')}
+      onClick={hasDetail ? () => setOpen(o => !o) : undefined}>
       <div className="agenda-date">{dstr}</div>
       <div className="agenda-body">
         <div className="agenda-title">{e.title}</div>
         <div className="agenda-meta">
           {e.vehicle ? e.vehicle.name : 'Fleet'}
           {e.basis && !overdue ? ` · ${e.basis}` : ''}
+          {hasDetail && <span className="agenda-more">{open ? ' · hide parts' : ' · parts ▸'}</span>}
         </div>
+        {open && hasDetail && (
+          <div className="plist" onClick={ev => ev.stopPropagation()}>
+            {(e.item.parts || []).map((p, i) => <PartLine key={i} p={p} />)}
+            {e.item.part_number && <div className="pline"><span className="pname">PN {e.item.part_number}</span></div>}
+            {e.item.notes && <div className="pline">{e.item.notes}</div>}
+          </div>
+        )}
       </div>
       <span className={'cal-dot big ' + (overdue ? 'red' : 'amber')} />
     </div>

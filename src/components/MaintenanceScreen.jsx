@@ -53,10 +53,26 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
               {m.part_number && <><br />PN {m.part_number}</>}
               {m.notes && <><br />{m.notes}</>}
             </div>
+            {m.parts?.length > 0 && (
+              <div className="plist">
+                {m.parts.map((p, i) => <PartLine key={i} p={p} />)}
+              </div>
+            )}
           </div>
         </div>
       ))}
     </>
+  )
+}
+
+// One line per part: "Engine Oil — 0W-20 · 7.9 qt · PN 00279-0WQTE-01"
+export function PartLine({ p }) {
+  return (
+    <div className="pline">
+      <span className="pname">{p.name}</span>
+      {[p.spec, p.qty, p.part_number ? `PN ${p.part_number}` : null]
+        .filter(Boolean).map((x, i) => <span key={i}> · {x}</span>)}
+    </div>
   )
 }
 
@@ -95,8 +111,12 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
     part_number: item?.part_number ?? '',
     notes: item?.notes ?? '',
   })
+  const [parts, setParts] = useState(item?.parts?.length ? item.parts : [])
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const setPart = (i, k, v) => setParts(ps => ps.map((p, j) => j === i ? { ...p, [k]: v } : p))
+  const addPart = () => setParts(ps => [...ps, { name: '', spec: '', qty: '', part_number: '' }])
+  const rmPart = (i) => setParts(ps => ps.filter((_, j) => j !== i))
 
   const save = async () => {
     setBusy(true)
@@ -108,10 +128,18 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
       last_done_date: f.last_done_date || null,
       part_number: f.part_number || null,
       notes: f.notes || null,
+      parts: parts.filter(p => p.name || p.spec || p.qty || p.part_number),
     }
-    let error
-    if (item) ({ error } = await supabase.from('maintenance_items').update(payload).eq('id', item.id))
-    else ({ error } = await supabase.from('maintenance_items').insert({ ...payload, vehicle_id: vehicleId, user_id: ownerId }))
+    const write = (pl) => item
+      ? supabase.from('maintenance_items').update(pl).eq('id', item.id)
+      : supabase.from('maintenance_items').insert({ ...pl, vehicle_id: vehicleId, user_id: ownerId })
+    let { error } = await write(payload)
+    if (error && /parts/.test(error.message)) {
+      // parts column missing until migration 0011 — save the rest, flag the gap
+      const { parts: _p, ...rest } = payload
+      ;({ error } = await write(rest))
+      if (!error) alert('Saved, but the parts list needs migration 0011_maint_parts.sql applied in the Supabase SQL Editor first.')
+    }
     setBusy(false)
     if (error) { alert(error.message); return }
     onDone(true)
@@ -161,6 +189,33 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
         <label>Part Number</label>
         <input value={f.part_number} onChange={e => set('part_number', e.target.value)} />
       </div>
+      <div className="field">
+        <label>Parts & Fluids for This Service</label>
+      </div>
+      {parts.map((p, i) => (
+        <div className="partrow" key={i}>
+          <div className="frow">
+            <div className="field">
+              <input value={p.name} onChange={e => setPart(i, 'name', e.target.value)} placeholder="Engine Oil" />
+            </div>
+            <div className="field">
+              <input value={p.spec} onChange={e => setPart(i, 'spec', e.target.value)} placeholder="0W-20 Full Syn" />
+            </div>
+          </div>
+          <div className="frow">
+            <div className="field">
+              <input value={p.qty} onChange={e => setPart(i, 'qty', e.target.value)} placeholder="7.9 qt" />
+            </div>
+            <div className="field" style={{ display: 'flex', gap: 6 }}>
+              <input value={p.part_number} onChange={e => setPart(i, 'part_number', e.target.value)}
+                placeholder="PN 04152-YZZA5" style={{ flex: 1 }} />
+              <button className="btn-sm" onClick={() => rmPart(i)} aria-label="Remove part"
+                style={{ width: 38, flexShrink: 0, color: 'var(--red)', borderColor: 'rgba(255,77,77,0.35)' }}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button className="btn-sm" onClick={addPart} style={{ marginBottom: 12 }}>+ ADD PART / FLUID</button>
       <div className="field">
         <label>Notes</label>
         <textarea rows={2} value={f.notes} onChange={e => set('notes', e.target.value)} />

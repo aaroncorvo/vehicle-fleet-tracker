@@ -687,3 +687,14 @@ input[type="checkbox"] {
   font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
   letter-spacing: 0.1em; margin-bottom: 12px; text-transform: uppercase;
 }
+
+/* ===== Maintenance parts lists ===== */
+.plist { margin-top: 7px; border-left: 2px solid rgba(255, 176, 0, 0.3); padding-left: 9px; }
+.pline {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint);
+  padding: 1.5px 0; letter-spacing: 0.02em;
+}
+.pline .pname { color: var(--text-dim); }
+.partrow { border-top: 1px dashed var(--line); padding-top: 10px; margin-bottom: 2px; }
+.agenda-row.expandable { cursor: pointer; }
+.agenda-more { color: var(--amber); }
