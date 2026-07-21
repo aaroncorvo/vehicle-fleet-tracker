@@ -48,7 +48,7 @@ async function buildDigest(ownerId: string) {
     rows(admin.from("driver_docs").select("*").eq("user_id", ownerId).not("expires_on", "is", null)),
   ]).catch(() => [[], [], [], [], [], []]);
 
-  const sections: { vehicle: string; lines: string[] }[] = [];
+  const sections: { vehicle_id: string | null; vehicle: string; lines: string[] }[] = [];
   for (const v of vehicles) {
     const odo = Math.max(v.base_odometer ?? 0,
       ...fuel.filter((r: any) => r.vehicle_id === v.id).map((r: any) => r.odometer),
@@ -65,18 +65,25 @@ async function buildDigest(ownerId: string) {
       if (st.remainDays != null) bits.push(st.remainDays <= 0 ? `${Math.abs(st.remainDays)} days over` : `${st.remainDays} days left`);
       lines.push(`${st.level} — ${m.name} (${bits.join(", ")})${m.part_number ? ` [PN ${m.part_number}]` : ""}`);
     }
-    if (lines.length) sections.push({ vehicle: `${v.name}${v.nickname ? ` "${v.nickname}"` : ""} @ ${odo.toLocaleString()} mi`, lines });
+    if (lines.length) sections.push({ vehicle_id: v.id, vehicle: `${v.name}${v.nickname ? ` "${v.nickname}"` : ""} @ ${odo.toLocaleString()} mi`, lines });
   }
 
-  // expiring glovebox documents (insurance cards, registration, ...)
-  const docLines: string[] = [];
+  // expiring glovebox documents — attached to their vehicle's section (or fleet-wide)
   for (const d of docs ?? []) {
     const days = Math.round((new Date(d.expires_on).getTime() - Date.now()) / 86400000);
     if (days > 30) continue;
     const veh = vehicles.find((v: any) => v.id === d.vehicle_id);
-    docLines.push(`${days < 0 ? "OVERDUE" : "DUE SOON"} — ${d.label || d.kind} (${d.holder}${veh ? `, ${veh.name}` : ""}) ${days < 0 ? `expired ${d.expires_on}` : `expires ${d.expires_on}`}`);
+    const line = `${days < 0 ? "OVERDUE" : "DUE SOON"} — ${d.label || d.kind} (${d.holder}${veh ? `, ${veh.name}` : ""}) ${days < 0 ? `expired ${d.expires_on}` : `expires ${d.expires_on}`}`;
+    if (veh) {
+      let sec = sections.find((s) => s.vehicle_id === veh.id);
+      if (!sec) { sec = { vehicle_id: veh.id, vehicle: veh.name, lines: [] }; sections.push(sec); }
+      sec.lines.push(line);
+    } else {
+      let sec = sections.find((s) => s.vehicle_id === null);
+      if (!sec) { sec = { vehicle_id: null, vehicle: "Documents (fleet-wide)", lines: [] }; sections.push(sec); }
+      sec.lines.push(line);
+    }
   }
-  if (docLines.length) sections.push({ vehicle: "Documents", lines: docLines });
   return sections;
 }
 
@@ -94,13 +101,21 @@ function renderEmail(sections: { vehicle: string; lines: string[] }[]) {
     Log the service in the app to clear an item.</p></div>`;
 }
 
-async function recipientsFor(ownerId: string, excl: Record<string, unknown> | null) {
+async function allRecipientEmails(ownerId: string) {
   const to = new Set<string>();
   const { data: owner } = await admin.auth.admin.getUserById(ownerId);
   if (owner?.user?.email) to.add(owner.user.email);
   const { data: members } = await admin.from("fleet_members").select("member_email").eq("owner_user_id", ownerId);
   for (const m of members ?? []) to.add(m.member_email);
-  return [...to].filter((e) => excl?.[e.toLowerCase()] !== false && excl?.[e] !== false);
+  return [...to];
+}
+
+// recipient pref value: false | true | { enabled, vehicles: null | [vehicle ids] }
+function normRecipient(v: unknown): { enabled: boolean; vehicles: string[] | null } {
+  if (v === false) return { enabled: false, vehicles: null };
+  if (v === true || v == null) return { enabled: true, vehicles: null };
+  const o = v as any;
+  return { enabled: o.enabled !== false, vehicles: o.vehicles ?? null };
 }
 
 async function runForOwner(ownerId: string, force = false) {
@@ -130,22 +145,45 @@ async function runForOwner(ownerId: string, force = false) {
   }
   if (!RESEND_KEY) return { sent: false, reason: "RESEND_API_KEY not set" };
 
-  const to = await recipientsFor(ownerId, prefs?.recipients ?? null);
-  if (!to.length) return { sent: false, reason: "no recipients enabled" };
-  const n = sections.reduce((s, x) => s + x.lines.length, 0);
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: FROM, to,
-      subject: `MotorLog: ${n} item${n > 1 ? "s" : ""} need attention`,
-      html: renderEmail(sections),
-    }),
-  });
-  const res = await r.json();
-  if (!r.ok) return { sent: false, reason: `Resend: ${res.message ?? r.status}` };
+  // per-recipient vehicle scope: group identical scopes, send one email per group
+  const emails = await allRecipientEmails(ownerId);
+  const scoped = emails
+    .map((e) => ({ email: e, ...normRecipient(prefs?.recipients?.[e.toLowerCase()] ?? prefs?.recipients?.[e]) }))
+    .filter((r) => r.enabled);
+  if (!scoped.length) return { sent: false, reason: "no recipients enabled" };
+
+  const groups = new Map<string, { vehicles: string[] | null; emails: string[] }>();
+  for (const r of scoped) {
+    const key = r.vehicles ? [...r.vehicles].sort().join(",") : "all";
+    if (!groups.has(key)) groups.set(key, { vehicles: r.vehicles, emails: [] });
+    groups.get(key)!.emails.push(r.email);
+  }
+
+  const delivered: { to: string[]; items: number }[] = [];
+  for (const g of groups.values()) {
+    const secs = g.vehicles
+      ? sections.filter((s) => s.vehicle_id === null || g.vehicles!.includes(s.vehicle_id))
+      : sections;
+    if (!secs.length) continue;
+    const n = secs.reduce((s, x) => s + x.lines.length, 0);
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: FROM, to: g.emails,
+        subject: `MotorLog: ${n} item${n > 1 ? "s" : ""} need attention`,
+        html: renderEmail(secs),
+      }),
+    });
+    if (r.ok) delivered.push({ to: g.emails, items: n });
+    else {
+      const res = await r.json().catch(() => ({}));
+      return { sent: false, reason: `Resend: ${(res as any).message ?? r.status}` };
+    }
+  }
+  if (!delivered.length) return { sent: false, reason: "nothing due for enabled recipients' vehicles" };
   await admin.from("alert_state").upsert({ user_id: ownerId, last_hash: hash, last_sent_at: new Date().toISOString() });
-  return { sent: true, to, items: n };
+  return { sent: true, to: delivered.flatMap((d) => d.to), groups: delivered };
 }
 
 Deno.serve(async (req) => {

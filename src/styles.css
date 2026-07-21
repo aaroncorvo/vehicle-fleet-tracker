@@ -271,6 +271,17 @@ body::before {
   background: #0A0A0C;
   box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.14);
 }
+/* checkboxes: native control, amber, clearly visible on dark */
+input[type="checkbox"] {
+  -webkit-appearance: checkbox !important;
+  appearance: auto !important;
+  width: 19px !important;
+  height: 19px !important;
+  padding: 0 !important;
+  accent-color: var(--amber);
+  flex-shrink: 0;
+  cursor: pointer;
+}
 .field select {
   background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
     linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);

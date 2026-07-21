@@ -96,7 +96,15 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
     ...(isOwner && me?.email ? [me.email] : []),
     ...members?.filter(m => m.owner_user_id === ownerId).map(m => m.member_email) ?? [],
   ]
-  const recipientOn = (e) => prefs.recipients?.[e.toLowerCase()] !== false
+  // recipient value: false | true | { enabled, vehicles: null|[vehicle ids] }
+  const normRecip = (e) => {
+    const r = prefs.recipients?.[e.toLowerCase()]
+    if (r === false) return { enabled: false, vehicles: null }
+    if (r === true || r == null) return { enabled: true, vehicles: null }
+    return { enabled: r.enabled !== false, vehicles: r.vehicles ?? null }
+  }
+  const setRecip = (e, next) =>
+    savePrefs({ ...prefs, recipients: { ...prefs.recipients, [e.toLowerCase()]: next } })
 
   const savePrefs = async (next) => {
     setPrefs(next)
@@ -315,16 +323,38 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
               {FREQS.find(([v]) => v === prefs.frequency)?.[2]}
             </div>
             <div className="field">
-              <label>Who receives alerts</label>
+              <label>Who receives alerts — and for which vehicles</label>
               {recipientEmails.length === 0 && <div className="note">Recipients appear here once members are added.</div>}
-              {recipientEmails.map(e => (
-                <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontSize: 13, fontFamily: 'var(--font-mono)', letterSpacing: 0, padding: '5px 0', color: 'var(--text-dim)' }}>
-                  <input type="checkbox" checked={recipientOn(e)} disabled={!isOwner}
-                    onChange={ev => savePrefs({ ...prefs, recipients: { ...prefs.recipients, [e.toLowerCase()]: ev.target.checked ? true : false } })}
-                    style={{ width: 'auto' }} />
-                  {e}{isOwner && me?.email === e && ' (you — account holder)'}
-                </label>
-              ))}
+              {recipientEmails.map(e => {
+                const r = normRecip(e)
+                const chip = { fontSize: 11, padding: '5px 10px' }
+                return (
+                  <div key={e} style={{ padding: '7px 0', borderBottom: '1px solid var(--line)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 9, textTransform: 'none', fontSize: 13, fontFamily: 'var(--font-mono)', letterSpacing: 0, color: r.enabled ? 'var(--text)' : 'var(--text-faint)' }}>
+                      <input type="checkbox" checked={r.enabled} disabled={!isOwner}
+                        onChange={ev => setRecip(e, { ...r, enabled: ev.target.checked })} />
+                      {e}{me?.email === e && ' (you)'}
+                    </label>
+                    {r.enabled && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 2px 28px' }}>
+                        <button className={'vchip' + (r.vehicles == null ? ' on' : '')} style={chip} disabled={!isOwner}
+                          onClick={() => setRecip(e, { ...r, vehicles: null })}>ALL CARS</button>
+                        {vehicles.map(v => {
+                          const sel = r.vehicles?.includes(v.id)
+                          return (
+                            <button key={v.id} className={'vchip' + (sel ? ' on' : '')} style={chip} disabled={!isOwner}
+                              onClick={() => {
+                                const list = r.vehicles == null ? [v.id]
+                                  : sel ? r.vehicles.filter(x => x !== v.id) : [...r.vehicles, v.id]
+                                setRecip(e, { ...r, vehicles: list.length ? list : null })
+                              }}>{v.name}</button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
             <button className="btn2" onClick={sendTest} disabled={prefsBusy}>
               {prefsBusy ? 'WORKING…' : 'SEND TEST ALERT NOW'}

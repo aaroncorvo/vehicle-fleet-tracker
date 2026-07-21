@@ -92,10 +92,20 @@ export default function App() {
 
   useEffect(() => { if (session) refresh() }, [session, refresh])
 
-  // keep the global selection valid as vehicles load/change
+  // keep the global selection valid as vehicles load/change; each device
+  // remembers its driver's vehicle and lands on their Profile at open
+  const landed = useRef(false)
   useEffect(() => {
-    if (vehicles.length && !vehicles.some(v => v.id === vid)) setVid(vehicles[0].id)
+    if (!vehicles.length) return
+    if (!vehicles.some(v => v.id === vid)) {
+      const saved = localStorage.getItem('ml_vid')
+      const pick = vehicles.find(v => v.id === saved)?.id ?? vehicles[0].id
+      setVid(pick)
+      if (!landed.current && pick === saved && !window.location.search) setTab('Profile')
+    }
+    landed.current = true
   }, [vehicles, vid])
+  useEffect(() => { if (vid) localStorage.setItem('ml_vid', vid) }, [vid])
 
   // Once-daily NHTSA recall sweep across the fleet
   const recallSweepDone = useRef(false)
