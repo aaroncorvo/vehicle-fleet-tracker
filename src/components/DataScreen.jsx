@@ -72,6 +72,58 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
     await loadMembers(); showToast('REMOVED')
   }
 
+  // ---- alert preferences ----
+  const ownerId = vehicles[0]?.user_id
+  const isOwner = me?.id === ownerId
+  const [prefs, setPrefs] = useState({ frequency: 'weekly', recipients: {} })
+  const [prefsMissing, setPrefsMissing] = useState(false)
+  const [prefsBusy, setPrefsBusy] = useState(false)
+  useEffect(() => {
+    supabase.from('alert_prefs').select('*').then(({ data, error }) => {
+      if (error) { setPrefsMissing(true); return }
+      if (data?.[0]) setPrefs({ frequency: data[0].frequency, recipients: data[0].recipients || {} })
+    })
+  }, [])
+
+  const FREQS = [
+    ['urgent', 'Urgent only', 'Email only when something new goes overdue, a recall appears, or a document hits expiry'],
+    ['weekly', 'Weekly', 'Monday morning summary — only if anything needs attention'],
+    ['monthly', 'Monthly', '1st of the month summary'],
+    ['daily', 'Daily', 'Every morning anything is due (skips exact repeats)'],
+    ['off', 'Off', 'No emails — in-app flags only'],
+  ]
+  const recipientEmails = [
+    ...(isOwner && me?.email ? [me.email] : []),
+    ...members?.filter(m => m.owner_user_id === ownerId).map(m => m.member_email) ?? [],
+  ]
+  const recipientOn = (e) => prefs.recipients?.[e.toLowerCase()] !== false
+
+  const savePrefs = async (next) => {
+    setPrefs(next)
+    if (!isOwner) return
+    setPrefsBusy(true)
+    const { error } = await supabase.from('alert_prefs').upsert({
+      user_id: ownerId, frequency: next.frequency, recipients: next.recipients,
+      updated_at: new Date().toISOString(),
+    })
+    setPrefsBusy(false)
+    if (error) showToast('SAVE FAILED: ' + error.message)
+    else showToast('ALERT SETTINGS SAVED')
+  }
+
+  const sendTest = async () => {
+    setPrefsBusy(true)
+    try {
+      const r = await (async () => {
+        const { data, error } = await supabase.functions.invoke('alerts', { body: {} })
+        if (error) throw error
+        return data
+      })()
+      showToast(r.sent ? `SENT TO ${r.to.length} RECIPIENT${r.to.length > 1 ? 'S' : ''}` : `NOT SENT: ${r.reason || r.error}`)
+    } catch (e) { showToast('ERROR: ' + e.message) }
+    setPrefsBusy(false)
+  }
+
   const vName = id => vehicles.find(v => v.id === id)?.name || id
 
   const downloadCsv = (rows, filename) => {
@@ -242,6 +294,42 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
               They create their own account with that exact email (sign-up link on the login screen),
               and your whole fleet appears for them — entries they add land on the shared fleet.
             </div>
+          </>
+        )}
+      </div>
+
+      <div className="section-label">Alerts & Notifications</div>
+      <div className="card">
+        {prefsMissing ? (
+          <div className="note">Alert settings not set up — run supabase/migrations/0010_alert_prefs.sql, then reload.</div>
+        ) : (
+          <>
+            <div className="field">
+              <label>Email frequency</label>
+              <select value={prefs.frequency} disabled={!isOwner}
+                onChange={e => savePrefs({ ...prefs, frequency: e.target.value })}>
+                {FREQS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div className="note" style={{ marginBottom: 12 }}>
+              {FREQS.find(([v]) => v === prefs.frequency)?.[2]}
+            </div>
+            <div className="field">
+              <label>Who receives alerts</label>
+              {recipientEmails.length === 0 && <div className="note">Recipients appear here once members are added.</div>}
+              {recipientEmails.map(e => (
+                <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontSize: 13, fontFamily: 'var(--font-mono)', letterSpacing: 0, padding: '5px 0', color: 'var(--text-dim)' }}>
+                  <input type="checkbox" checked={recipientOn(e)} disabled={!isOwner}
+                    onChange={ev => savePrefs({ ...prefs, recipients: { ...prefs.recipients, [e.toLowerCase()]: ev.target.checked ? true : false } })}
+                    style={{ width: 'auto' }} />
+                  {e}{isOwner && me?.email === e && ' (you — account holder)'}
+                </label>
+              ))}
+            </div>
+            <button className="btn2" onClick={sendTest} disabled={prefsBusy}>
+              {prefsBusy ? 'WORKING…' : 'SEND TEST ALERT NOW'}
+            </button>
+            {!isOwner && <div className="note" style={{ marginTop: 8 }}>Only the account holder can change alert settings.</div>}
           </>
         )}
       </div>

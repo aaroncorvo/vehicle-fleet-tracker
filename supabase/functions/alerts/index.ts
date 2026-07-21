@@ -94,24 +94,44 @@ function renderEmail(sections: { vehicle: string; lines: string[] }[]) {
     Log the service in the app to clear an item.</p></div>`;
 }
 
-async function recipientsFor(ownerId: string) {
+async function recipientsFor(ownerId: string, excl: Record<string, unknown> | null) {
   const to = new Set<string>();
   const { data: owner } = await admin.auth.admin.getUserById(ownerId);
   if (owner?.user?.email) to.add(owner.user.email);
   const { data: members } = await admin.from("fleet_members").select("member_email").eq("owner_user_id", ownerId);
   for (const m of members ?? []) to.add(m.member_email);
-  return [...to];
+  return [...to].filter((e) => excl?.[e.toLowerCase()] !== false && excl?.[e] !== false);
 }
 
 async function runForOwner(ownerId: string, force = false) {
+  // preferences: frequency + recipient exclusions (default: weekly, everyone)
+  const { data: prefs } = await admin.from("alert_prefs").select("*").eq("user_id", ownerId).maybeSingle()
+    .then((r: any) => r, () => ({ data: null }));
+  const freq = prefs?.frequency ?? "weekly";
+  if (!force && freq === "off") return { sent: false, reason: "alerts off" };
+
   const sections = await buildDigest(ownerId);
   if (!sections.length) return { sent: false, reason: "nothing due" };
   const hash = JSON.stringify(sections);
   const { data: state } = await admin.from("alert_state").select("last_hash").eq("user_id", ownerId).maybeSingle();
-  if (!force && state?.last_hash === hash) return { sent: false, reason: "unchanged" };
+
+  if (!force) {
+    const now = new Date();
+    const due =
+      freq === "daily" ? true :
+      freq === "weekly" ? now.getUTCDay() === 1 :          // Mondays
+      freq === "monthly" ? now.getUTCDate() === 1 :        // 1st of the month
+      /* urgent */ state?.last_hash !== hash;              // only when something changed
+    if (!due) return { sent: false, reason: `waiting (${freq})` };
+    if (freq !== "urgent" && state?.last_hash === hash && (freq === "daily")) {
+      // daily still skips exact repeats to avoid inbox noise
+      return { sent: false, reason: "unchanged" };
+    }
+  }
   if (!RESEND_KEY) return { sent: false, reason: "RESEND_API_KEY not set" };
 
-  const to = await recipientsFor(ownerId);
+  const to = await recipientsFor(ownerId, prefs?.recipients ?? null);
+  if (!to.length) return { sent: false, reason: "no recipients enabled" };
   const n = sections.reduce((s, x) => s + x.lines.length, 0);
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
