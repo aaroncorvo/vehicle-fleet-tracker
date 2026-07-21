@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { fuelStats, currentOdometer, fmt } from '../lib/calc.js'
 import { uploadVehiclePhoto, deleteVehiclePhoto, setPrimaryPhoto, photoUrls } from '../lib/vehiclePhotos.js'
+import { decodeVin } from '../lib/vin.js'
+import { syncRecalls } from '../lib/recalls.js'
 
-export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, photosError, refresh, showToast }) {
+export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, photosError, recalls = [], recallsError, refresh, showToast }) {
   const vphotos = photos.filter(p => p.vehicle_id === vehicle.id)
     .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || a.created_at.localeCompare(b.created_at))
   const [urls, setUrls] = useState({})
@@ -18,6 +20,38 @@ export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, 
     photoUrls(vphotos).then(m => { if (live) setUrls(m) }).catch(() => {})
     return () => { live = false }
   }, [photos, vehicle.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const vrecalls = recalls.filter(r => r.vehicle_id === vehicle.id)
+  const [recallBusy, setRecallBusy] = useState(false)
+  const [decodeBusy, setDecodeBusy] = useState(false)
+
+  const checkRecalls = async () => {
+    setRecallBusy(true)
+    try {
+      const n = await syncRecalls(vehicle, recalls)
+      showToast(n ? `⚠ ${n} NEW RECALL${n > 1 ? 'S' : ''}` : 'NO NEW RECALLS')
+      if (n) await refresh()
+    } catch (e) { showToast('CHECK FAILED: ' + e.message) }
+    setRecallBusy(false)
+  }
+
+  const setRecallStatus = async (r, status) => {
+    await supabase.from('recalls').update({ status }).eq('id', r.id)
+    await refresh()
+  }
+
+  const doDecode = async () => {
+    if (!vehicle.vin) { showToast('NO VIN ON FILE'); return }
+    setDecodeBusy(true)
+    try {
+      const d = await decodeVin(vehicle.vin)
+      const { error } = await supabase.from('vehicles').update({ vin_decode: d }).eq('id', vehicle.id)
+      if (error) throw error
+      showToast('VIN DECODED')
+      await refresh()
+    } catch (e) { showToast('DECODE FAILED: ' + e.message) }
+    setDecodeBusy(false)
+  }
 
   const addPhoto = async (file) => {
     if (!file) return
@@ -98,6 +132,52 @@ export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, 
             </div>
           )}
         </>
+      )}
+
+      <div className="section-label">Recalls</div>
+      {recallsError ? (
+        <div className="note">Recall tracking not set up — run supabase/migrations/0007_vin_recalls.sql, then reload.</div>
+      ) : (
+        <>
+          {vrecalls.length === 0 && <div className="note" style={{ marginBottom: 8 }}>No known recalls on file.</div>}
+          {vrecalls.map(r => (
+            <div className="mrow" key={r.id}>
+              <div className={'dot ' + (r.status === 'open' ? 'overdue' : 'ok')} />
+              <div className="mmain">
+                <div className="mt" style={{ fontSize: 15 }}>{(r.component || 'Recall').split(':').pop()}</div>
+                <div className="ms">
+                  NHTSA {r.campaign}{r.report_date ? ' · ' + r.report_date : ''}
+                  {r.summary && <><br />{r.summary.length > 220 ? r.summary.slice(0, 220) + '…' : r.summary}</>}
+                  {r.status === 'open' && r.remedy && <><br /><span className="soon">Remedy: {r.remedy.length > 160 ? r.remedy.slice(0, 160) + '…' : r.remedy}</span></>}
+                </div>
+                <button className="btn-sm" style={{ marginTop: 6 }}
+                  onClick={() => setRecallStatus(r, r.status === 'open' ? 'resolved' : 'open')}>
+                  {r.status === 'open' ? 'MARK RESOLVED' : 'RESOLVED ✓ (REOPEN)'}
+                </button>
+              </div>
+            </div>
+          ))}
+          <button className="btn2" onClick={checkRecalls} disabled={recallBusy} style={{ marginTop: 8 }}>
+            {recallBusy ? 'CHECKING NHTSA…' : 'CHECK FOR RECALLS'}
+          </button>
+        </>
+      )}
+
+      <div className="section-label">Factory Specs — VIN</div>
+      {vehicle.vin_decode ? (
+        <div className="card">
+          {Object.entries(vehicle.vin_decode.specs || {}).map(([k, v]) => (
+            <div className="logrow" key={k} style={{ padding: '7px 0' }}>
+              <div className="ls" style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{k}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, textAlign: 'right' }}>{v}</div>
+            </div>
+          ))}
+          <div className="note" style={{ marginTop: 8 }}>NHTSA vPIC decode of {vehicle.vin} · {vehicle.vin_decode.decoded_at}</div>
+        </div>
+      ) : (
+        <button className="btn2" onClick={doDecode} disabled={decodeBusy || recallsError}>
+          {decodeBusy ? 'DECODING…' : '⌕ DECODE VIN — PULL FACTORY SPECS'}
+        </button>
       )}
 
       <div className="section-label">Profile</div>

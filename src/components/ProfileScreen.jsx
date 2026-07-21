@@ -4,7 +4,7 @@ import VehicleSelect from './VehicleSelect.jsx'
 import VehicleDetail from './VehicleDetail.jsx'
 
 // Dedicated per-vehicle page: photos, profile fields, and recent work.
-export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, serviceLogs, receipts, photos, photosError, refresh, showToast, goTab }) {
+export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, serviceLogs, receipts, photos, photosError, recalls, recallsError, refresh, showToast, goTab }) {
   const vehicle = vehicles.find(v => v.id === vid) || vehicles[0]
   if (!vehicle) return null
   const recent = serviceLogs.filter(s => s.vehicle_id === vehicle.id).slice(0, 5)
@@ -15,7 +15,8 @@ export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, service
       <VehicleSelect vehicles={vehicles} vid={vehicle.id} setVid={setVid} />
 
       <VehicleDetail vehicle={vehicle} fuelLogs={fuelLogs} serviceLogs={serviceLogs}
-        photos={photos || []} photosError={photosError} refresh={refresh} showToast={showToast} />
+        photos={photos || []} photosError={photosError} recalls={recalls || []} recallsError={recallsError}
+        refresh={refresh} showToast={showToast} />
 
       <div className="section-label">Updates & Repairs</div>
       {recent.length === 0 && (

@@ -2,6 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+# Proxy to NHTSA recalls API (no CORS on their end; Netlify rewrites server-side)
+[[redirects]]
+  from = "/nhtsa/*"
+  to = "https://api.nhtsa.gov/:splat"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

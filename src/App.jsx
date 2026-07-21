@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, configMissing } from './lib/supabase.js'
 import { loadSeed } from './lib/seed.js'
+import { dailyRecallCheck } from './lib/recalls.js'
 import Dashboard from './components/Dashboard.jsx'
 import FuelScreen from './components/FuelScreen.jsx'
 import ServiceScreen from './components/ServiceScreen.jsx'
@@ -37,6 +38,8 @@ export default function App() {
   const [receiptsError, setReceiptsError] = useState(false)
   const [photos, setPhotos] = useState([])
   const [photosError, setPhotosError] = useState(false)
+  const [recalls, setRecalls] = useState([])
+  const [recallsError, setRecallsError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
@@ -57,7 +60,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [v, f, s, m, fc, rc, ph] = await Promise.all([
+    const [v, f, s, m, fc, rc, ph, rec] = await Promise.all([
       supabase.from('vehicles').select('*').eq('archived', false).order('sort_order'),
       supabase.from('fuel_logs').select('*').order('odometer'),
       supabase.from('service_logs').select('*').order('serviced_at', { ascending: false }),
@@ -65,6 +68,7 @@ export default function App() {
       supabase.from('fixed_costs').select('*').order('name'),
       supabase.from('receipts').select('*').order('receipt_date', { ascending: false }),
       supabase.from('vehicle_photos').select('*').order('created_at'),
+      supabase.from('recalls').select('*').order('report_date', { ascending: false }),
     ])
     setVehicles(v.data || [])
     setFuelLogs(f.data || [])
@@ -76,6 +80,8 @@ export default function App() {
     setReceiptsError(!!rc.error)     // table missing until migration 0003 is applied
     setPhotos(ph.data || [])
     setPhotosError(!!ph.error)       // table missing until migration 0004 is applied
+    setRecalls(rec.data || [])
+    setRecallsError(!!rec.error)     // table missing until migration 0007 is applied
     setLoading(false)
   }, [])
 
@@ -85,6 +91,16 @@ export default function App() {
   useEffect(() => {
     if (vehicles.length && !vehicles.some(v => v.id === vid)) setVid(vehicles[0].id)
   }, [vehicles, vid])
+
+  // Once-daily NHTSA recall sweep across the fleet
+  const recallSweepDone = useRef(false)
+  useEffect(() => {
+    if (recallSweepDone.current || !vehicles.length || recallsError) return
+    recallSweepDone.current = true
+    dailyRecallCheck(vehicles, recalls).then(added => {
+      if (added) { showToast(`⚠ ${added} NEW RECALL${added > 1 ? 'S' : ''} FOUND`); refresh() }
+    })
+  }, [vehicles, recalls, recallsError, refresh, showToast])
 
   // Google Drive OAuth redirect: ?code=...&state=... lands back on the app root
   useEffect(() => {
@@ -125,8 +141,8 @@ export default function App() {
       <div className="wrap">
         {loading ? <div className="spin" /> : (
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> :
-          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} goTab={setTab} /> :
-          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} goTab={setTab} /> :
+          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} goTab={setTab} /> :
+          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :
