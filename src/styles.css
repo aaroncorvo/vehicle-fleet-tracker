@@ -590,3 +590,100 @@ input[type="checkbox"] {
 }
 .tcokey span { display: flex; align-items: center; gap: 5px; }
 .tcokey i { width: 10px; height: 6px; border-radius: 1px; display: inline-block; }
+
+/* ===== Vehicle chip switcher ===== */
+.vswitch {
+  display: flex; gap: 8px; margin-bottom: 16px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; padding-bottom: 2px;
+}
+.vswitch::-webkit-scrollbar { display: none; }
+.vsw {
+  flex: 1 0 auto; min-width: 82px; max-width: 120px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 9px 8px 7px; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s var(--ease);
+}
+.vsw:active { transform: scale(0.97); }
+.vsw img, .vsw .vsw-ph {
+  width: 44px; height: 44px; border-radius: 4px; object-fit: cover;
+  border: 1px solid var(--line-bright);
+}
+.vsw .vsw-ph {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint); background: var(--panel-2);
+}
+.vsw .vsw-ph svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.vsw-name {
+  font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase;
+  letter-spacing: 0.07em; font-size: 13.5px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.vsw-sub {
+  font-family: var(--font-mono); font-size: 8.5px; color: var(--text-faint);
+  letter-spacing: 0.05em; white-space: nowrap;
+}
+.vsw.on {
+  border-color: rgba(255, 176, 0, 0.65);
+  box-shadow: 0 0 0 1px rgba(255, 176, 0, 0.35), 0 0 18px rgba(255, 176, 0, 0.12);
+  background: linear-gradient(rgba(255, 176, 0, 0.07), rgba(255, 176, 0, 0.02)), var(--panel);
+}
+.vsw.on .vsw-name { color: var(--amber); }
+
+/* ===== Header actions + Glovebox ===== */
+.hdr-actions { display: flex; align-items: center; gap: 4px; }
+.hdr .gbbtn {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--amber); border: 1px solid rgba(255, 176, 0, 0.4);
+  border-radius: 5px; padding: 6px 10px;
+}
+.hdr .gbbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.hdr .gbbtn:hover, .hdr .gbbtn:active { color: var(--amber-hi); border-color: rgba(255, 176, 0, 0.7); }
+
+.gbsheet {
+  position: fixed; inset: 0; z-index: 90; overflow-y: auto;
+  background: var(--bg); padding: calc(16px + env(safe-area-inset-top)) 18px 40px;
+  animation: gbin 0.18s var(--ease);
+}
+@keyframes gbin { from { opacity: 0; transform: translateY(14px); } }
+.gbsheet-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+.gbsheet-title {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 26px; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--amber);
+  text-shadow: 0 0 18px rgba(255, 176, 0, 0.35);
+}
+.gbsheet-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); letter-spacing: 0.08em; margin-top: 4px; }
+.gbclose {
+  background: none; border: 1px solid var(--line-bright); color: var(--text-dim);
+  border-radius: 5px; width: 38px; height: 38px; font-size: 16px; cursor: pointer;
+}
+.gbdoc {
+  display: block; width: 100%; text-align: left; position: relative;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 15px 16px; margin-bottom: 10px; cursor: pointer;
+  transition: border-color 0.15s, transform 0.12s var(--ease);
+}
+.gbdoc:active { transform: scale(0.985); border-color: rgba(255, 176, 0, 0.5); }
+.gbdoc-kind {
+  font-family: var(--font-mono); font-size: 10px; color: var(--amber);
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+.gbdoc-label { font-size: 16.5px; color: var(--text); margin-top: 3px; padding-right: 60px; }
+.gbdoc-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); margin-top: 5px; }
+.gbdoc-meta .bad { color: #FF7A73; }
+.gbdoc-meta .warn { color: var(--amber-hi); }
+.gbdoc-go {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 11px; color: var(--amber); letter-spacing: 0.08em;
+}
+.gbviewer {
+  position: fixed; inset: 0; z-index: 95; background: rgba(0, 0, 0, 0.96);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px; cursor: pointer;
+}
+.gbviewer img { max-width: 100%; max-height: 86vh; border-radius: 6px; }
+.gbviewer-title {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+  letter-spacing: 0.1em; margin-bottom: 12px; text-transform: uppercase;
+}

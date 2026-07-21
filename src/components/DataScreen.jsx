@@ -311,6 +311,8 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
           </div>
         </div>
         <div className="note">Tap the circle to set your photo. Name and photo are yours; theme is per device.</div>
+        <div style={{ height: 10 }} />
+        <button className="btn2" onClick={() => supabase.auth.signOut()}>SIGN OUT</button>
       </div>
 
       <div className="section-label">Google Drive Backup</div>

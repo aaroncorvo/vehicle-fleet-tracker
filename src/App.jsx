@@ -10,6 +10,7 @@ import DataScreen from './components/DataScreen.jsx'
 import TcoScreen from './components/TcoScreen.jsx'
 import ProfileScreen from './components/ProfileScreen.jsx'
 import VehicleSelect from './components/VehicleSelect.jsx'
+import GloveboxSheet from './components/GloveboxSheet.jsx'
 
 const TABS = ['Fleet', 'Vehicle', 'Fuel', 'Service', 'Maint', 'TCO', 'Settings']
 const VEHICLE_TABS = ['Vehicle', 'Fuel', 'Service', 'Maint', 'TCO']
@@ -47,6 +48,7 @@ export default function App() {
   const [docsError, setDocsError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
+  const [gbOpen, setGbOpen] = useState(false)
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -158,13 +160,18 @@ export default function App() {
           <h1><span className="tick">///</span> MOTORLOG</h1>
           <div className="sub">{vehicles.length} VEHICLES · TRACKED</div>
         </div>
-        <button onClick={() => supabase.auth.signOut()}>SIGN OUT</button>
+        {vehicles.length > 0 && (
+          <button className="gbbtn" onClick={() => setGbOpen(true)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><path d="M7 14.5h5" /></svg>
+            GLOVEBOX
+          </button>
+        )}
       </header>
 
       <div className="wrap">
         {loading ? <div className="spin" /> : (
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> : <>
-          {VEHICLE_TABS.includes(tab) && <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} />}
+          {VEHICLE_TABS.includes(tab) && <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} photos={photos} />}
           {
           tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} fixedCosts={fixedCosts} docs={docs} goTab={setTab} /> :
           tab === 'Vehicle' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
@@ -185,6 +192,9 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <GloveboxSheet open={gbOpen} onClose={() => setGbOpen(false)} docs={docs}
+        vehicles={vehicles} vid={vid} goTab={t => { setGbOpen(false); setTab(t) }} />
 
       {toast && <div className="toast">{toast}</div>}
     </>
