@@ -125,11 +125,44 @@ Service: ${service}
 - If the service name doesn't consume parts (e.g. 'Tire Rotation'), return what's
   typically checked/replaced with it or an empty list.`;
 
+// Entitlement gate: OCR (and parts lookup) are paid-plan features once billing
+// launches. Fails OPEN if migration 0012 isn't applied or anything errors, so
+// the feature never breaks ahead of the billing rollout.
+async function ocrAllowed(req: Request): Promise<boolean> {
+  try {
+    const jwt = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!jwt || !url || !key) return true;
+    const uRes = await fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: key, authorization: `Bearer ${jwt}` },
+    });
+    if (!uRes.ok) return true;
+    const user = await uRes.json();
+    const rpc = await fetch(`${url}/rest/v1/rpc/user_has_feature`, {
+      method: "POST",
+      headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ uid: user.id, user_email: user.email, feat: "ocr" }),
+    });
+    if (!rpc.ok) return true; // 0012 not applied yet
+    return (await rpc.json()) === true;
+  } catch {
+    return true;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json();
     const { media_type, data, mode } = body;
+
+    if (!(await ocrAllowed(req))) {
+      return new Response(
+        JSON.stringify({ error: "Scanning requires a paid plan — upgrade in Settings." }),
+        { status: 402, headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
 
     if (mode === "parts") {
       const { vehicle, service } = body;

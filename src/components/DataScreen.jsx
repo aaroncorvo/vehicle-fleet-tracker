@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg } from '../lib/calc.js'
 import { downscaleImage } from '../lib/images.js'
+import { planStatus } from '../lib/plan.js'
 
-export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, theme, setTheme, refresh, showToast }) {
+export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, theme, setTheme, plan, refresh, showToast }) {
   const fileRef = useRef(null)
   const [importVid, setImportVid] = useState(vehicles[0]?.id)
   const [importBusy, setImportBusy] = useState(false)
@@ -315,6 +316,52 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
         <button className="btn2" onClick={() => supabase.auth.signOut()}>SIGN OUT</button>
       </div>
 
+      <div className="section-label">Plan</div>
+      <div className="card">
+        {(() => {
+          const myMembers = members?.filter(m => m.owner_user_id === ownerId).length ?? 0
+          const st = planStatus(plan, { vehicles: vehicles.length, members: myMembers })
+          if (!st.ready) return (
+            <div className="note">
+              Billing foundation not set up yet — run supabase/migrations/0012_billing.sql, then reload.
+              Until then nothing is limited.
+            </div>
+          )
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--amber)' }}>
+                  {st.tier}
+                </span>
+                <span className="note" style={{ margin: 0 }}>current plan</span>
+              </div>
+              <div className="gauges" style={{ marginTop: 12 }}>
+                <div className="gauge">
+                  <div className="gv">{st.vehiclesUsed}<span style={{ color: 'var(--text-faint)' }}>/{st.maxVehicles}</span></div>
+                  <div className="gl">Vehicles</div>
+                </div>
+                <div className="gauge">
+                  <div className="gv">{st.membersUsed}<span style={{ color: 'var(--text-faint)' }}>/{st.maxMembers}</span></div>
+                  <div className="gl">Members</div>
+                </div>
+                <div className="gauge">
+                  <div className="gv" style={{ color: st.features.ocr ? 'var(--green)' : 'var(--text-faint)' }}>{st.features.ocr ? 'ON' : '—'}</div>
+                  <div className="gl">Receipt OCR</div>
+                </div>
+                <div className="gauge">
+                  <div className="gv" style={{ color: st.features.drive_backup ? 'var(--green)' : 'var(--text-faint)' }}>{st.features.drive_backup ? 'ON' : '—'}</div>
+                  <div className="gl">Drive Backup</div>
+                </div>
+              </div>
+              <div className="note" style={{ marginTop: 12 }}>
+                Subscriptions aren't on sale yet — billing launches with the public release.
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
       <div className="section-label">Google Drive Backup</div>
       <div className="card">
         {drive.loading ? <div className="spin" style={{ margin: '10px auto' }} /> :
@@ -362,12 +409,26 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
                 You also have access to a fleet shared with you.
               </div>
             )}
-            <div className="field" style={{ marginTop: 10 }}>
-              <label>Add family member by email</label>
-              <input type="email" inputMode="email" value={newMember} onChange={e => setNewMember(e.target.value)}
-                placeholder="kary@example.com" onKeyDown={e => e.key === 'Enter' && addMember()} />
-            </div>
-            <button className="btn2" onClick={addMember}>+ ADD MEMBER</button>
+            {(() => {
+              const st = planStatus(plan, {
+                vehicles: vehicles.length,
+                members: members.filter(m => m.owner_user_id === me?.id).length,
+              })
+              return st.canAddMember ? (
+                <>
+                  <div className="field" style={{ marginTop: 10 }}>
+                    <label>Add family member by email</label>
+                    <input type="email" inputMode="email" value={newMember} onChange={e => setNewMember(e.target.value)}
+                      placeholder="kary@example.com" onKeyDown={e => e.key === 'Enter' && addMember()} />
+                  </div>
+                  <button className="btn2" onClick={addMember}>+ ADD MEMBER</button>
+                </>
+              ) : (
+                <div className="note" style={{ marginTop: 10 }}>
+                  Member limit reached ({st.membersUsed}/{st.maxMembers} on the {st.tier} plan).
+                </div>
+              )
+            })()}
             <div className="note" style={{ marginTop: 10 }}>
               They create their own account with that exact email (sign-up link on the login screen),
               and your whole fleet appears for them — entries they add land on the shared fleet.

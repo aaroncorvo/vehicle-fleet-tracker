@@ -4,10 +4,11 @@ import { computeMpg, fuelStats, currentOdometer, maintenanceStatus, tcoRollup, f
 import { photoUrls, primaryPhoto } from '../lib/vehiclePhotos.js'
 import { decodeVin } from '../lib/vin.js'
 import { PartLine } from './MaintenanceScreen.jsx'
+import { planStatus } from '../lib/plan.js'
 
 const DAY = 86400000
 
-export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, fixedCosts, docs, photos, recalls, setVid, refresh, showToast, goTab }) {
+export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, fixedCosts, docs, photos, recalls, plan, setVid, refresh, showToast, goTab }) {
   const [thumbs, setThumbs] = useState({})
   const [addOpen, setAddOpen] = useState(false)
 
@@ -93,9 +94,14 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
       {addOpen ? (
         <AddVehicleForm ownerId={vehicles[0]?.user_id} nextSort={vehicles.length + 1}
           onDone={async (saved) => { setAddOpen(false); if (saved) { showToast('VEHICLE ADDED'); await refresh() } }} />
-      ) : (
-        <button className="btn2" onClick={() => setAddOpen(true)}>+ ADD VEHICLE BY VIN</button>
-      )}
+      ) : (() => {
+        const st = planStatus(plan, { vehicles: vehicles.length, members: 0 })
+        return st.canAddVehicle
+          ? <button className="btn2" onClick={() => setAddOpen(true)}>+ ADD VEHICLE BY VIN</button>
+          : <div className="note" style={{ textAlign: 'center', padding: '10px 0' }}>
+              Vehicle limit reached ({st.vehiclesUsed}/{st.maxVehicles} on the {st.tier} plan) — manage your plan in Settings.
+            </div>
+      })()}
     </>
   )
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, configMissing } from './lib/supabase.js'
 import { loadSeed } from './lib/seed.js'
 import { dailyRecallCheck } from './lib/recalls.js'
+import { fetchPlan } from './lib/plan.js'
 import Dashboard from './components/Dashboard.jsx'
 import FuelScreen from './components/FuelScreen.jsx'
 import ServiceScreen from './components/ServiceScreen.jsx'
@@ -49,6 +50,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const [gbOpen, setGbOpen] = useState(false)
+  const [plan, setPlan] = useState(null)      // fleet owner's billing plan (0012)
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -112,6 +114,15 @@ export default function App() {
   }, [vehicles, vid])
   useEffect(() => { if (vid) localStorage.setItem('ml_vid', vid) }, [vid])
 
+  // Fleet owner's plan — gates cosmetic UI; triggers in Postgres are the wall
+  useEffect(() => {
+    const owner = vehicles[0]?.user_id ?? session?.user?.id
+    if (!owner) return
+    let live = true
+    fetchPlan(owner).then(p => { if (live) setPlan(p) })
+    return () => { live = false }
+  }, [vehicles, session])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('ml_theme', theme)
@@ -173,13 +184,13 @@ export default function App() {
           vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> : <>
           {VEHICLE_TABS.includes(tab) && <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} photos={photos} />}
           {
-          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} fixedCosts={fixedCosts} docs={docs} goTab={setTab} /> :
+          tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} fixedCosts={fixedCosts} docs={docs} plan={plan} goTab={setTab} /> :
           tab === 'Vehicle' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :
           tab === 'TCO' ? <TcoScreen {...commonProps} fixedCosts={fixedCosts} fixedCostsError={fixedCostsError} /> :
-          <DataScreen {...commonProps} theme={theme} setTheme={setTheme} />}
+          <DataScreen {...commonProps} theme={theme} setTheme={setTheme} plan={plan} />}
           </>
         )}
       </div>
