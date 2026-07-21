@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg } from '../lib/calc.js'
 
@@ -6,6 +6,46 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
   const fileRef = useRef(null)
   const [importVid, setImportVid] = useState(vehicles[0]?.id)
   const [importBusy, setImportBusy] = useState(false)
+  const [drive, setDrive] = useState({ loading: true })
+  const [backupBusy, setBackupBusy] = useState(false)
+
+  const driveCall = async (body) => {
+    const { data, error } = await supabase.functions.invoke('google-drive', { body })
+    if (error) throw error
+    if (data?.error) throw new Error(data.error)
+    return data
+  }
+
+  const loadDriveStatus = async () => {
+    try { setDrive({ loading: false, ...(await driveCall({ action: 'status' })) }) }
+    catch { setDrive({ loading: false, unavailable: true }) }
+  }
+  useEffect(() => { loadDriveStatus() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const connectDrive = async () => {
+    try {
+      const state = crypto.randomUUID()
+      sessionStorage.setItem('gdrive_state', state)
+      const { url } = await driveCall({ action: 'auth-url', redirect_uri: location.origin + '/', state })
+      location.href = url
+    } catch (e) { showToast('ERROR: ' + e.message) }
+  }
+
+  const backupNow = async () => {
+    setBackupBusy(true)
+    try {
+      const r = await driveCall({ action: 'backup' })
+      showToast(`BACKED UP ${r.files} FILES TO DRIVE`)
+      await loadDriveStatus()
+    } catch (e) { showToast('BACKUP FAILED: ' + e.message) }
+    setBackupBusy(false)
+  }
+
+  const disconnectDrive = async () => {
+    if (!confirm('Disconnect Google Drive? Daily backups will stop. Files already in Drive stay.')) return
+    try { await driveCall({ action: 'disconnect' }); await loadDriveStatus(); showToast('DISCONNECTED') }
+    catch (e) { showToast('ERROR: ' + e.message) }
+  }
 
   const vName = id => vehicles.find(v => v.id === id)?.name || id
 
@@ -120,6 +160,36 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
 
   return (
     <>
+      <div className="section-label">Google Drive Backup</div>
+      <div className="card">
+        {drive.loading ? <div className="spin" style={{ margin: '10px auto' }} /> :
+        drive.connected ? (
+          <>
+            <div className="ls" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', marginBottom: 4 }}>
+              ● CONNECTED — {drive.email}
+            </div>
+            <div className="note" style={{ marginBottom: 12 }}>
+              Backing up to "{drive.folder_name}" in Drive, automatically every night at 2:00 AM CT.
+              {drive.last_backup_at && <><br />Last backup: {new Date(drive.last_backup_at).toLocaleString()} ({drive.last_backup_result})</>}
+            </div>
+            <button className="btn" onClick={backupNow} disabled={backupBusy}>
+              {backupBusy ? 'BACKING UP…' : '⇪ BACKUP NOW'}
+            </button>
+            <div style={{ height: 8 }} />
+            <button className="btn2" onClick={disconnectDrive}>DISCONNECT</button>
+          </>
+        ) : (
+          <>
+            <button className="btn" onClick={connectDrive} disabled={drive.unavailable}>CONNECT GOOGLE DRIVE</button>
+            <div className="note" style={{ marginTop: 10 }}>
+              {drive.unavailable
+                ? 'Backup service not deployed yet — see supabase/functions/google-drive + migration 0005.'
+                : 'One-time Google sign-in. Creates a "Fleet Records" folder in your Drive with per-vehicle records, photos, and receipts — refreshed nightly and on demand. The app can only touch files it creates.'}
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="section-label">Export</div>
       <div className="card">
         <div style={{ display: 'grid', gap: 8 }}>

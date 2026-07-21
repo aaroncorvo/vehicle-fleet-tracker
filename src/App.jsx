@@ -75,6 +75,22 @@ export default function App() {
     if (vehicles.length && !vehicles.some(v => v.id === vid)) setVid(vehicles[0].id)
   }, [vehicles, vid])
 
+  // Google Drive OAuth redirect: ?code=...&state=... lands back on the app root
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code'), state = params.get('state')
+    if (!session || !code) return
+    window.history.replaceState({}, '', window.location.pathname)
+    if (state !== sessionStorage.getItem('gdrive_state')) { showToast('DRIVE CONNECT FAILED: state mismatch'); return }
+    sessionStorage.removeItem('gdrive_state')
+    supabase.functions.invoke('google-drive', {
+      body: { action: 'exchange', code, redirect_uri: window.location.origin + '/' },
+    }).then(({ data, error }) => {
+      if (error || data?.error) showToast('DRIVE CONNECT FAILED: ' + (data?.error || error.message))
+      else { showToast('GOOGLE DRIVE CONNECTED — ' + (data.email || '')); setTab('Data') }
+    })
+  }, [session, showToast])
+
   if (configMissing) return (
     <div className="empty" style={{ paddingTop: '30vh' }}>
       VITE_SUPABASE_URL / VITE_SUPABASE_KEY not set.<br />Configure environment variables and rebuild.

@@ -76,6 +76,16 @@ is the lens for every feature decision):
 - ⏳ Local dev note: `.env` does not exist yet in the working copy — without it,
   `npm run build` statically compiles to the config-missing screen (tiny bundle, no app).
   Netlify has the env vars, so deploys are unaffected.
+- ✅ Google Drive backup feature (Data tab): "Connect Google Drive" OAuth (drive.file scope,
+  embedded consent flow) + BACKUP NOW button + nightly pg_cron backup (7:00 UTC) via the
+  `google-drive` edge function. Tokens live server-side in `google_drive_connections`
+  (RLS on, NO policies — service-role only).
+- ⏳ **Drive backup setup pending**: (1) run migration 0005; (2) deploy
+  `supabase/functions/google-drive/index.ts` with JWT verification **OFF** (it self-auths:
+  user JWT or x-cron-secret); (3) secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  GDRIVE_CRON_SECRET (value must match the one baked into migration 0005); (4) user creates
+  the Google OAuth client (Web app, redirect URI exactly https://vehicle-fleet-tracker.netlify.app/,
+  consent screen published to Production so refresh tokens don't expire weekly).
 - ⏳ Signups may still be open — check and disable in dashboard (owner account exists).
 - ⏳ The misplaced BlackOrchid project `dtztfigimyvpnzbqqwzw` (empty, $10/mo) still needs
   dashboard deletion.
