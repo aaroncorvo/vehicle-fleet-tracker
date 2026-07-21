@@ -51,7 +51,7 @@ export default function VehicleDetail({ vehicle, fuelLogs, serviceLogs, photos, 
           <div className="gauge"><div className="gv">{fmt.num(odo)}</div><div className="gl">Odometer</div></div>
           <div className="gauge"><div className="gv amber">{fmt.mpg(fs?.aggMpg)}</div><div className="gl">Avg MPG</div></div>
           <div className="gauge"><div className="gv">{fmt.cpm(fs?.costPerMile)}</div><div className="gl">Fuel $/mi</div></div>
-          <div className="gauge"><div className="gv">{vehicle.fuel_octane || '—'}</div><div className="gl">Octane</div></div>
+          <div className="gauge"><div className="gv">{vehicle.fuel_octane ? vehicle.fuel_octane.split(' ')[0] : '—'}</div><div className="gl">Octane</div></div>
         </div>
       </div>
 
