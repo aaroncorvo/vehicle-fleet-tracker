@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react'
 import { fmt } from '../lib/calc.js'
-import VehicleSelect from './VehicleSelect.jsx'
 import VehicleDetail from './VehicleDetail.jsx'
 import { DOC_KINDS, uploadDoc, docUrl, deleteDoc, docExpiry, prepareDocFile, ocrDocument, extractionToDocForm } from '../lib/docs.js'
 
@@ -14,8 +13,6 @@ export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, service
 
   return (
     <>
-      <VehicleSelect vehicles={vehicles} vid={vehicle.id} setVid={setVid} />
-
       <VehicleDetail vehicle={vehicle} fuelLogs={fuelLogs} serviceLogs={serviceLogs}
         photos={photos || []} photosError={photosError} recalls={recalls || []} recallsError={recallsError}
         refresh={refresh} showToast={showToast} />

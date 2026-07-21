@@ -1,11 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { tcoRollup, fmt } from '../lib/calc.js'
-import VehicleSelect from './VehicleSelect.jsx'
 
 export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts, fixedCostsError, vid, setVid, refresh, showToast }) {
   const [editCost, setEditCost] = useState(null)
   const [adding, setAdding] = useState(false)
+  useEffect(() => { setEditCost(null); setAdding(false) }, [vid])
   const vehicle = vehicles.find(v => v.id === vid)
   if (!vehicle) return null
 
@@ -14,8 +14,6 @@ export default function TcoScreen({ vehicles, fuelLogs, serviceLogs, fixedCosts,
 
   return (
     <>
-      <VehicleSelect vehicles={vehicles} vid={vid}
-        setVid={id => { setVid(id); setEditCost(null); setAdding(false) }} />
 
       <div className="statgrid">
         <div className="stat"><div className="sv">{fmt.cpm(t.totalCPM)}</div><div className="sl">Total $/mi</div></div>

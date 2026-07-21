@@ -461,3 +461,65 @@ input[type="checkbox"] {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ============================================================
+   LIGHT THEME — daylight cockpit. Toggled via <html data-theme="light">.
+   ============================================================ */
+:root[data-theme="light"] {
+  --bg: #F4F1EA;
+  --panel: #FFFFFF;
+  --panel-2: #FBF9F4;
+  --line: rgba(30, 25, 10, 0.10);
+  --line-bright: rgba(30, 25, 10, 0.20);
+  --text: #1D1B16;
+  --text-dim: #47443C;
+  --text-faint: #77746A;
+  --amber: #A96A00;
+  --amber-hi: #C87F00;
+  --amber-dim: #8A5800;
+  --green: #157A44;
+  --red: #C0362C;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.7) inset, 0 10px 26px -14px rgba(60, 45, 10, 0.22);
+}
+:root[data-theme="light"] body::before {
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(200, 140, 0, 0.07), transparent 60%),
+    none;
+}
+:root[data-theme="light"] .hdr {
+  background: linear-gradient(rgba(244, 241, 234, 0.94), rgba(244, 241, 234, 0.8));
+}
+:root[data-theme="light"] .hdr h1 .tick,
+:root[data-theme="light"] .auth h1 .tick { text-shadow: none; }
+:root[data-theme="light"] .nav { background: rgba(251, 249, 244, 0.92); }
+:root[data-theme="light"] .nav button.on::before { box-shadow: none; }
+:root[data-theme="light"] .nav button.on svg { filter: none; }
+:root[data-theme="light"] .field input,
+:root[data-theme="light"] .field select,
+:root[data-theme="light"] .field textarea { background: #FFFFFF; }
+:root[data-theme="light"] .field input:focus,
+:root[data-theme="light"] .field select:focus,
+:root[data-theme="light"] .field textarea:focus { background: #FFFFFF; }
+:root[data-theme="light"] .field input::placeholder,
+:root[data-theme="light"] .field textarea::placeholder { color: #A29E92; }
+:root[data-theme="light"] .seg { background: #EFEBE1; }
+:root[data-theme="light"] .seg button.on,
+:root[data-theme="light"] .vchip.on,
+:root[data-theme="light"] .btn {
+  background: linear-gradient(180deg, #E89400, #C87F00 60%, #B27100);
+  color: #FFF8EC;
+}
+:root[data-theme="light"] .btn:disabled { background: #EDEAE1; color: var(--text-faint); }
+:root[data-theme="light"] .btn2 { background: rgba(30, 25, 10, 0.03); }
+:root[data-theme="light"] .btn-sm { background: rgba(30, 25, 10, 0.03); }
+:root[data-theme="light"] .stat .sv,
+:root[data-theme="light"] .gauge .gv.amber { text-shadow: none; }
+:root[data-theme="light"] .flag.overdue { color: #B02318; border-color: rgba(192, 54, 44, 0.4); background: rgba(192, 54, 44, 0.07); }
+:root[data-theme="light"] .flag.due-soon { color: #8A5800; border-color: rgba(169, 106, 0, 0.45); background: rgba(169, 106, 0, 0.08); }
+:root[data-theme="light"] .mrow .ms .warn { color: #B02318; }
+:root[data-theme="light"] .mrow .ms .soon { color: #8A5800; }
+:root[data-theme="light"] .toast {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--amber-dim);
+  box-shadow: 0 8px 28px -8px rgba(60, 45, 10, 0.3);
+}

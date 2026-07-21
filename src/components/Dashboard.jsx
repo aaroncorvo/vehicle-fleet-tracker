@@ -34,7 +34,7 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
         const openRecalls = (recalls || []).filter(r => r.vehicle_id === v.id && r.status === 'open').length
         return <VehicleCard key={v.id} v={v} thumb={p ? thumbs[p.file_path] : null} openRecalls={openRecalls}
           fuelLogs={fuelLogs} serviceLogs={serviceLogs} maintItems={maintItems}
-          onOpen={() => { setVid(v.id); goTab('Profile') }} />
+          onOpen={() => { setVid(v.id); goTab('Vehicle') }} />
       })}
 
       {addOpen ? (

@@ -1,8 +1,7 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { fmt } from '../lib/calc.js'
 import { prepareReceiptFile, uploadReceipt, ocrReceipt, receiptUrl, extractionToService } from '../lib/receipts.js'
-import VehicleSelect from './VehicleSelect.jsx'
 
 const COMMON_SERVICES = [
   'Oil Change', 'Tire Rotation', 'Tires', 'Engine Air Filter', 'Cabin Air Filter',
@@ -16,6 +15,7 @@ export default function ServiceScreen({ vehicles, serviceLogs, maintItems, recei
   const [prefill, setPrefill] = useState(null)     // { initial, receipt } from a scan
   const [scanning, setScanning] = useState(false)
   const fileRef = useRef(null)
+  useEffect(() => { setShowForm(false); setPrefill(null) }, [vid])
   const vlogs = serviceLogs.filter(s => s.vehicle_id === vid)
   const vehicle = vehicles.find(v => v.id === vid)
   const totalSpend = vlogs.reduce((s, x) => s + Number(x.cost || 0), 0)
@@ -47,9 +47,6 @@ export default function ServiceScreen({ vehicles, serviceLogs, maintItems, recei
 
   return (
     <>
-      <VehicleSelect vehicles={vehicles} vid={vid}
-        setVid={id => { setVid(id); setShowForm(false); setPrefill(null) }} />
-
       <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment"
         style={{ display: 'none' }} onChange={e => { scan(e.target.files[0]); e.target.value = '' }} />
 

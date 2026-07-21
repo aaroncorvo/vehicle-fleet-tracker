@@ -31,27 +31,27 @@ export default function MpgChart({ points }) {
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }} role="img" aria-label="MPG trend">
       <defs>
         <linearGradient id="mpgfill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#FFB000" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="#FFB000" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--amber)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--amber)" stopOpacity="0" />
         </linearGradient>
       </defs>
       {/* avg reference */}
-      <line x1={PL} x2={W - PR} y1={Y(avg)} y2={Y(avg)} stroke="rgba(255,255,255,0.14)" strokeDasharray="3 4" strokeWidth="1" />
-      <text x={W - PR} y={Y(avg) - 4} textAnchor="end" fontSize="8.5" fill="#918F87" fontFamily="IBM Plex Mono, monospace">
+      <line x1={PL} x2={W - PR} y1={Y(avg)} y2={Y(avg)} stroke="var(--line-bright)" strokeDasharray="3 4" strokeWidth="1" />
+      <text x={W - PR} y={Y(avg) - 4} textAnchor="end" fontSize="8.5" fill="var(--text-faint)" fontFamily="IBM Plex Mono, monospace">
         avg {avg.toFixed(1)}
       </text>
       {/* y extremes */}
-      <text x={PL - 5} y={Y(yMax) + 8} textAnchor="end" fontSize="9" fill="#918F87" fontFamily="IBM Plex Mono, monospace">{yMax}</text>
-      <text x={PL - 5} y={Y(yMin)} textAnchor="end" fontSize="9" fill="#918F87" fontFamily="IBM Plex Mono, monospace">{yMin}</text>
+      <text x={PL - 5} y={Y(yMax) + 8} textAnchor="end" fontSize="9" fill="var(--text-faint)" fontFamily="IBM Plex Mono, monospace">{yMax}</text>
+      <text x={PL - 5} y={Y(yMin)} textAnchor="end" fontSize="9" fill="var(--text-faint)" fontFamily="IBM Plex Mono, monospace">{yMin}</text>
       <path d={area} fill="url(#mpgfill)" />
-      <path d={path} fill="none" stroke="#FFB000" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={path} fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       {points.map((p, i) => (
         <circle key={i} cx={X(p.odometer)} cy={Y(p.mpg)} r={low[i] ? 3.6 : 2.8}
-          fill={low[i] ? '#FF5A52' : '#FFB000'} stroke="#060607" strokeWidth="1.4" />
+          fill={low[i] ? 'var(--red)' : 'var(--amber)'} stroke="var(--bg)" strokeWidth="1.4" />
       ))}
       {/* x labels: first/last odometer */}
-      <text x={PL} y={H - 6} fontSize="9" fill="#918F87" fontFamily="IBM Plex Mono, monospace">{xMin.toLocaleString()}</text>
-      <text x={W - PR} y={H - 6} textAnchor="end" fontSize="9" fill="#918F87" fontFamily="IBM Plex Mono, monospace">{xMax.toLocaleString()} mi</text>
+      <text x={PL} y={H - 6} fontSize="9" fill="var(--text-faint)" fontFamily="IBM Plex Mono, monospace">{xMin.toLocaleString()}</text>
+      <text x={W - PR} y={H - 6} textAnchor="end" fontSize="9" fill="var(--text-faint)" fontFamily="IBM Plex Mono, monospace">{xMax.toLocaleString()} mi</text>
     </svg>
   )
 }

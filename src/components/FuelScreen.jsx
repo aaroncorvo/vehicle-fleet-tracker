@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg, fuelStats, maintenanceStatus, fmt } from '../lib/calc.js'
-import VehicleSelect from './VehicleSelect.jsx'
 import MpgChart from './MpgChart.jsx'
 
 export default function FuelScreen({ vehicles, fuelLogs, maintItems, vid, setVid, refresh, showToast }) {
@@ -13,8 +12,6 @@ export default function FuelScreen({ vehicles, fuelLogs, maintItems, vid, setVid
 
   return (
     <>
-      <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} />
-
       {!showForm && (
         <button className="btn" onClick={() => setShowForm(true)} style={{ marginBottom: 16 }}>
           + LOG FILL-UP

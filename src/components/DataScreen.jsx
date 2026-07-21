@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg } from '../lib/calc.js'
+import { downscaleImage } from '../lib/images.js'
 
-export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, refresh, showToast }) {
+export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, theme, setTheme, refresh, showToast }) {
   const fileRef = useRef(null)
   const [importVid, setImportVid] = useState(vehicles[0]?.id)
   const [importBusy, setImportBusy] = useState(false)
@@ -117,6 +118,36 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
     setPrefsBusy(false)
     if (error) showToast('SAVE FAILED: ' + error.message)
     else showToast('ALERT SETTINGS SAVED')
+  }
+
+  // ---- user profile (name, avatar, theme) ----
+  const [displayName, setDisplayName] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState(null)
+  const avatarRef = useRef(null)
+  useEffect(() => {
+    if (!me) return
+    setDisplayName(me.user_metadata?.display_name || '')
+    const p = me.user_metadata?.avatar_path
+    if (p) supabase.storage.from('documents').createSignedUrl(p, 3600)
+      .then(({ data }) => data && setAvatarUrl(data.signedUrl))
+  }, [me])
+
+  const saveName = async () => {
+    const { error } = await supabase.auth.updateUser({ data: { display_name: displayName.trim() } })
+    if (error) showToast('ERROR: ' + error.message)
+  }
+  const uploadAvatar = async (file) => {
+    if (!file) return
+    try {
+      const blob = await downscaleImage(file, 512)
+      const path = `${me.id}/avatar/${Date.now()}.jpg`
+      const { error } = await supabase.storage.from('documents').upload(path, blob, { contentType: 'image/jpeg' })
+      if (error) throw error
+      await supabase.auth.updateUser({ data: { avatar_path: path } })
+      const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
+      setAvatarUrl(data?.signedUrl)
+      showToast('AVATAR UPDATED')
+    } catch (e) { showToast('ERROR: ' + e.message) }
   }
 
   const sendTest = async () => {
@@ -245,6 +276,43 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
 
   return (
     <>
+      <div className="section-label">Your Profile</div>
+      <div className="card">
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+          <div onClick={() => avatarRef.current.click()}
+            style={{ width: 64, height: 64, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--amber)',
+              cursor: 'pointer', background: 'var(--panel-2)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexShrink: 0 }}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: 'var(--amber)' }}>
+                  {(displayName || me?.email || '?')[0].toUpperCase()}
+                </span>}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 600 }}>{displayName || 'Set your name'}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me?.email}</div>
+          </div>
+        </div>
+        <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={e => { uploadAvatar(e.target.files[0]); e.target.value = '' }} />
+        <div className="frow">
+          <div className="field">
+            <label>Display name</label>
+            <input value={displayName} onChange={e => setDisplayName(e.target.value)} onBlur={saveName} placeholder="Aaron" />
+          </div>
+          <div className="field">
+            <label>Appearance</label>
+            <div className="seg">
+              {['dark', 'light'].map(t => (
+                <button key={t} className={theme === t ? 'on' : ''} onClick={() => setTheme(t)}>{t}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="note">Tap the circle to set your photo. Name and photo are yours; theme is per device.</div>
+      </div>
+
       <div className="section-label">Google Drive Backup</div>
       <div className="card">
         {drive.loading ? <div className="spin" style={{ margin: '10px auto' }} /> :

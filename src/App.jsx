@@ -9,18 +9,20 @@ import MaintenanceScreen from './components/MaintenanceScreen.jsx'
 import DataScreen from './components/DataScreen.jsx'
 import TcoScreen from './components/TcoScreen.jsx'
 import ProfileScreen from './components/ProfileScreen.jsx'
+import VehicleSelect from './components/VehicleSelect.jsx'
 
-const TABS = ['Fleet', 'Profile', 'Fuel', 'Service', 'Maint', 'TCO', 'Data']
+const TABS = ['Fleet', 'Vehicle', 'Fuel', 'Service', 'Maint', 'TCO', 'Settings']
+const VEHICLE_TABS = ['Vehicle', 'Fuel', 'Service', 'Maint', 'TCO']
 
 // 24px stroke icons, one per tab — the Fleet mark is the brand's ///
 const ICONS = {
   Fleet: <><path d="M7.5 19L11 5" /><path d="M12.5 19L16 5" /><path d="M17.5 19L21 5" /></>,
-  Profile: <><path d="M4 16v-2.2c0-.9.5-1.7 1.3-2L7 11l1.6-3.2A2 2 0 0 1 10.4 6.5h3.2a2 2 0 0 1 1.8 1.3L17 11l1.7.8c.8.3 1.3 1.1 1.3 2V16" /><circle cx="7.5" cy="16.5" r="1.8" /><circle cx="16.5" cy="16.5" r="1.8" /><path d="M9.5 16.5h4.5" /></>,
+  Vehicle: <><path d="M4 16v-2.2c0-.9.5-1.7 1.3-2L7 11l1.6-3.2A2 2 0 0 1 10.4 6.5h3.2a2 2 0 0 1 1.8 1.3L17 11l1.7.8c.8.3 1.3 1.1 1.3 2V16" /><circle cx="7.5" cy="16.5" r="1.8" /><circle cx="16.5" cy="16.5" r="1.8" /><path d="M9.5 16.5h4.5" /></>,
   Fuel: <><path d="M4 21V6a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v15" /><path d="M3.5 21h10" /><path d="M13 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0v-7l-2.5-2.5" /><path d="M6.5 8h4" /></>,
   Service: <><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3L14.6 12 12 9.4l2.5-2.9z" /></>,
   Maint: <><path d="M4.5 14a7.5 7.5 0 0 1 15 0" /><path d="M12 14l3.4-3.9" /><path d="M4.5 14H3M21 14h-1.5M6 8.5l-1-1M18 8.5l1-1M12 5.5V4" /></>,
   TCO: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5v9" /><path d="M14.5 9.3c-.5-.8-1.4-1.2-2.5-1.2-1.5 0-2.6.8-2.6 1.9 0 2.6 5.2 1.3 5.2 3.9 0 1.1-1.1 1.9-2.6 1.9-1.1 0-2-.4-2.5-1.2" /></>,
-  Data: <><ellipse cx="12" cy="5.5" rx="7" ry="2.5" /><path d="M5 5.5V18c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5.5" /><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></>,
+  Settings: <><circle cx="12" cy="12" r="3.1" /><path d="M12 2.9v2.6M12 18.5v2.6M2.9 12h2.6M18.5 12h2.6M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" /></>,
 }
 
 export default function App() {
@@ -28,6 +30,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false)
   const [tab, setTab] = useState('Fleet')
   const [vid, setVid] = useState(null)          // globally selected vehicle
+  const [theme, setTheme] = useState(() => localStorage.getItem('ml_theme') || 'dark')
   const [vehicles, setVehicles] = useState([])
   const [fuelLogs, setFuelLogs] = useState([])
   const [serviceLogs, setServiceLogs] = useState([])
@@ -101,11 +104,16 @@ export default function App() {
       const saved = localStorage.getItem('ml_vid')
       const pick = vehicles.find(v => v.id === saved)?.id ?? vehicles[0].id
       setVid(pick)
-      if (!landed.current && pick === saved && !window.location.search) setTab('Profile')
+      if (!landed.current && pick === saved && !window.location.search) setTab('Vehicle')
     }
     landed.current = true
   }, [vehicles, vid])
   useEffect(() => { if (vid) localStorage.setItem('ml_vid', vid) }, [vid])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('ml_theme', theme)
+  }, [theme])
 
   // Once-daily NHTSA recall sweep across the fleet
   const recallSweepDone = useRef(false)
@@ -129,7 +137,7 @@ export default function App() {
       body: { action: 'exchange', code, redirect_uri: window.location.origin + '/' },
     }).then(({ data, error }) => {
       if (error || data?.error) showToast('DRIVE CONNECT FAILED: ' + (data?.error || error.message))
-      else { showToast('GOOGLE DRIVE CONNECTED — ' + (data.email || '')); setTab('Data') }
+      else { showToast('GOOGLE DRIVE CONNECTED — ' + (data.email || '')); setTab('Settings') }
     })
   }, [session, showToast])
 
@@ -155,14 +163,17 @@ export default function App() {
 
       <div className="wrap">
         {loading ? <div className="spin" /> : (
-          vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> :
+          vehicles.length === 0 ? <EmptyFleet refresh={refresh} showToast={showToast} /> : <>
+          {VEHICLE_TABS.includes(tab) && <VehicleSelect vehicles={vehicles} vid={vid} setVid={setVid} />}
+          {
           tab === 'Fleet' ? <Dashboard {...commonProps} photos={photos} recalls={recalls} goTab={setTab} /> :
-          tab === 'Profile' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
+          tab === 'Vehicle' ? <ProfileScreen {...commonProps} receipts={receipts} photos={photos} photosError={photosError} recalls={recalls} recallsError={recallsError} docs={docs} docsError={docsError} goTab={setTab} /> :
           tab === 'Fuel' ? <FuelScreen {...commonProps} /> :
           tab === 'Service' ? <ServiceScreen {...commonProps} receipts={receipts} receiptsError={receiptsError} /> :
           tab === 'Maint' ? <MaintenanceScreen {...commonProps} /> :
           tab === 'TCO' ? <TcoScreen {...commonProps} fixedCosts={fixedCosts} fixedCostsError={fixedCostsError} /> :
-          <DataScreen {...commonProps} />
+          <DataScreen {...commonProps} theme={theme} setTheme={setTheme} />}
+          </>
         )}
       </div>
 

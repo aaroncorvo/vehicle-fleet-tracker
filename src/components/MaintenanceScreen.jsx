@@ -1,13 +1,13 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { currentOdometer, maintenanceStatus, fmt } from '../lib/calc.js'
-import VehicleSelect from './VehicleSelect.jsx'
 
 const ORDER = { overdue: 0, 'due-soon': 1, baseline: 2, ok: 3 }
 
 export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, maintItems, vid, setVid, refresh, showToast }) {
   const [editItem, setEditItem] = useState(null)
   const [adding, setAdding] = useState(false)
+  useEffect(() => { setEditItem(null); setAdding(false) }, [vid])
   const vehicle = vehicles.find(v => v.id === vid)
   const odo = vehicle ? currentOdometer(vehicle, fuelLogs, serviceLogs) : 0
 
@@ -21,8 +21,6 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
 
   return (
     <>
-      <VehicleSelect vehicles={vehicles} vid={vid}
-        setVid={id => { setVid(id); setEditItem(null) }} />
 
       <div className="statgrid">
         <div className="stat"><div className="sv">{fmt.num(odo)}</div><div className="sl">Current Odo</div></div>
