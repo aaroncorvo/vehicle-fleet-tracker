@@ -60,11 +60,38 @@ const PROMPT = `Extract the data from this automotive receipt/invoice.
   mileage, install comments) — this is for a meticulous vehicle maintenance log.
 - Use null for anything not present. Do not guess values that are not on the receipt.`;
 
+// ---- document mode (glovebox: insurance cards, registration, roadside) ----
+const DOC_SCHEMA = {
+  type: "object",
+  properties: {
+    doc_type: {
+      type: ["string", "null"],
+      description: "Best-fit category: Insurance Card, Registration, Roadside / AAA, Warranty, Inspection, Membership, Other",
+    },
+    holder_name: { type: ["string", "null"], description: "Named insured / owner / member — first name is enough if that's all that fits" },
+    issuer: { type: ["string", "null"], description: "Company or agency, e.g. 'State Farm', 'Texas DMV', 'AAA Texas'" },
+    policy_or_id: { type: ["string", "null"], description: "Policy number, member number, or document ID" },
+    effective_date: { type: ["string", "null"], description: "Effective/issue date as YYYY-MM-DD" },
+    expiration_date: { type: ["string", "null"], description: "Expiration date as YYYY-MM-DD (2-digit years are 20xx)" },
+    vehicle_hint: { type: ["string", "null"], description: "Vehicle on the document: year/make/model, VIN, or plate" },
+    phone: { type: ["string", "null"], description: "Claims / roadside / contact phone number if shown" },
+    notes: { type: ["string", "null"], description: "Other useful details: coverage limits, agent name, NAIC number" },
+  },
+  required: ["doc_type", "holder_name", "issuer", "policy_or_id", "effective_date", "expiration_date", "vehicle_hint", "phone", "notes"],
+  additionalProperties: false,
+};
+
+const DOC_PROMPT = `Extract the data from this vehicle-related document (insurance card,
+registration, roadside/membership card, warranty, or inspection slip).
+- Dates in YYYY-MM-DD; 2-digit years are 20xx.
+- Use null for anything not present. Do not guess values that are not on the document.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { media_type, data } = await req.json();
+    const { media_type, data, mode } = await req.json();
     if (!media_type || !data) throw new Error("media_type and data (base64) required");
+    const isDoc = mode === "document";
 
     const fileBlock = media_type === "application/pdf"
       ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data } }
@@ -73,8 +100,8 @@ Deno.serve(async (req) => {
     const msg = await anthropic.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 2048,
-      output_config: { format: { type: "json_schema", schema: SCHEMA } },
-      messages: [{ role: "user", content: [fileBlock, { type: "text", text: PROMPT }] }],
+      output_config: { format: { type: "json_schema", schema: isDoc ? DOC_SCHEMA : SCHEMA } },
+      messages: [{ role: "user", content: [fileBlock, { type: "text", text: isDoc ? DOC_PROMPT : PROMPT }] }],
     });
 
     if (msg.stop_reason === "refusal") throw new Error("Extraction refused");

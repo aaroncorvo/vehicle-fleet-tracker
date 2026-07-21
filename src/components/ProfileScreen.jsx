@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { fmt } from '../lib/calc.js'
 import VehicleSelect from './VehicleSelect.jsx'
 import VehicleDetail from './VehicleDetail.jsx'
-import { DOC_KINDS, uploadDoc, docUrl, deleteDoc, docExpiry } from '../lib/docs.js'
+import { DOC_KINDS, uploadDoc, docUrl, deleteDoc, docExpiry, prepareDocFile, ocrDocument, extractionToDocForm } from '../lib/docs.js'
 
 // Dedicated per-vehicle page: photos, profile fields, glovebox docs, recent work.
 export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, serviceLogs, receipts, photos, photosError, recalls, recallsError, docs, docsError, refresh, showToast, goTab }) {
@@ -57,24 +57,43 @@ export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, service
 }
 
 function Glovebox({ vehicle, vdocs, refresh, showToast }) {
-  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState(null)          // null = closed; {holder,kind,label,expires_on,thisVehicle}
+  const [prepared, setPrepared] = useState(null)  // normalized file waiting for save
+  const [scanning, setScanning] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [f, setF] = useState({ holder: vehicle.primary_driver || '', kind: 'Insurance Card', label: '', expires_on: '', thisVehicle: true })
   const fileRef = useRef(null)
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  const save = async (file) => {
+  const handleFile = async (file) => {
     if (!file) return
+    setScanning(true)
+    try {
+      const prep = await prepareDocFile(file)
+      setPrepared(prep)
+      let pre = { holder: vehicle.primary_driver || '', kind: 'Insurance Card', label: '', expires_on: '' }
+      try {
+        pre = { ...pre, ...extractionToDocForm(await ocrDocument(prep)) }
+        if (!pre.holder) pre.holder = vehicle.primary_driver || ''
+        showToast('DOCUMENT READ — REVIEW & SAVE')
+      } catch {
+        showToast('SCAN UNAVAILABLE — FILL IN MANUALLY')
+      }
+      setForm({ ...pre, thisVehicle: true })
+    } catch (e) { showToast('ERROR: ' + e.message) }
+    setScanning(false)
+  }
+
+  const save = async () => {
     setBusy(true)
     try {
-      await uploadDoc(file, {
-        ownerId: vehicle.user_id, holder: f.holder || 'Family', kind: f.kind, label: f.label,
-        vehicleId: f.thisVehicle ? vehicle.id : null, expiresOn: f.expires_on,
+      await uploadDoc(prepared, {
+        ownerId: vehicle.user_id, holder: form.holder || 'Family', kind: form.kind, label: form.label,
+        vehicleId: form.thisVehicle ? vehicle.id : null, expiresOn: form.expires_on,
       })
       showToast('DOCUMENT SAVED')
-      setAdding(false)
+      setForm(null); setPrepared(null)
       await refresh()
-    } catch (e) { showToast('UPLOAD FAILED: ' + e.message) }
+    } catch (e) { showToast('SAVE FAILED: ' + e.message) }
     setBusy(false)
   }
 
@@ -111,44 +130,45 @@ function Glovebox({ vehicle, vdocs, refresh, showToast }) {
         )
       })}
       <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment"
-        style={{ display: 'none' }} onChange={e => { save(e.target.files[0]); e.target.value = '' }} />
-      {!adding ? (
-        <button className="btn2" onClick={() => setAdding(true)} style={{ marginTop: 8 }}>+ ADD DOCUMENT</button>
+        style={{ display: 'none' }} onChange={e => { handleFile(e.target.files[0]); e.target.value = '' }} />
+      {!form ? (
+        <button className="btn2" onClick={() => fileRef.current.click()} disabled={scanning} style={{ marginTop: 8 }}>
+          {scanning ? 'READING DOCUMENT…' : '⌁ ADD DOCUMENT — SNAP OR CHOOSE FILE'}
+        </button>
       ) : (
         <div className="card" style={{ marginTop: 8 }}>
+          <div className="note" style={{ marginBottom: 10, color: 'var(--amber)' }}>
+            ⌁ Fields below were read from the document — review before saving.
+          </div>
           <div className="frow">
             <div className="field">
               <label>Holder</label>
-              <input value={f.holder} onChange={e => set('holder', e.target.value)} placeholder="Aaron" />
+              <input value={form.holder} onChange={e => set('holder', e.target.value)} placeholder="Aaron" />
             </div>
             <div className="field">
               <label>Type</label>
-              <select value={f.kind} onChange={e => set('kind', e.target.value)}>
+              <select value={form.kind} onChange={e => set('kind', e.target.value)}>
                 {DOC_KINDS.map(k => <option key={k}>{k}</option>)}
               </select>
             </div>
           </div>
-          <div className="frow">
-            <div className="field">
-              <label>Label (optional)</label>
-              <input value={f.label} onChange={e => set('label', e.target.value)} placeholder="State Farm 84-XX-1234" />
-            </div>
-            <div className="field">
-              <label>Expires (optional)</label>
-              <input type="date" value={f.expires_on} onChange={e => set('expires_on', e.target.value)} />
-            </div>
+          <div className="field">
+            <label>Label</label>
+            <input value={form.label} onChange={e => set('label', e.target.value)} placeholder="State Farm 84-XX-1234" />
+          </div>
+          <div className="field">
+            <label>Expires</label>
+            <input type="date" value={form.expires_on} onChange={e => set('expires_on', e.target.value)} />
           </div>
           <div className="field">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, textTransform: 'none', fontSize: 12 }}>
-              <input type="checkbox" checked={f.thisVehicle} onChange={e => set('thisVehicle', e.target.checked)} style={{ width: 'auto' }} />
+              <input type="checkbox" checked={form.thisVehicle} onChange={e => set('thisVehicle', e.target.checked)} style={{ width: 'auto' }} />
               This vehicle only (uncheck for fleet-wide, e.g. AAA card)
             </label>
           </div>
-          <button className="btn" onClick={() => fileRef.current.click()} disabled={busy}>
-            {busy ? 'UPLOADING…' : '⌁ SNAP / CHOOSE FILE & SAVE'}
-          </button>
+          <button className="btn" onClick={save} disabled={busy}>{busy ? 'SAVING…' : 'SAVE DOCUMENT'}</button>
           <div style={{ height: 8 }} />
-          <button className="btn2" onClick={() => setAdding(false)}>CANCEL</button>
+          <button className="btn2" onClick={() => { setForm(null); setPrepared(null) }}>CANCEL</button>
           <div className="note" style={{ marginTop: 10 }}>
             Stored privately (owner-only access, encrypted at rest, links expire in 5 minutes).
             Good for insurance/registration cards — keep driver's licenses in Apple Wallet instead.
