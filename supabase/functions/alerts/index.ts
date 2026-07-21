@@ -38,13 +38,14 @@ function maintStatus(item: any, odo: number, today = new Date()) {
 }
 
 async function buildDigest(ownerId: string) {
+  const rows = (q: any) => q.then((r: any) => r.data ?? []);
   const [vehicles, fuel, svc, maint, recalls] = await Promise.all([
-    admin.from("vehicles").select("*").eq("user_id", ownerId).eq("archived", false).order("sort_order"),
-    admin.from("fuel_logs").select("vehicle_id,odometer").eq("user_id", ownerId),
-    admin.from("service_logs").select("vehicle_id,odometer").eq("user_id", ownerId),
-    admin.from("maintenance_items").select("*").eq("user_id", ownerId),
-    admin.from("recalls").select("*").eq("user_id", ownerId).eq("status", "open"),
-  ].map((p) => p.then((r: any) => r.data ?? [])) as any;
+    rows(admin.from("vehicles").select("*").eq("user_id", ownerId).eq("archived", false).order("sort_order")),
+    rows(admin.from("fuel_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
+    rows(admin.from("service_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
+    rows(admin.from("maintenance_items").select("*").eq("user_id", ownerId)),
+    rows(admin.from("recalls").select("*").eq("user_id", ownerId).eq("status", "open")),
+  ]);
 
   const sections: { vehicle: string; lines: string[] }[] = [];
   for (const v of vehicles) {
