@@ -1,4 +1,4 @@
-# CLAUDE.md — Vehicle Fleet Tracker
+# CLAUDE.md — MotorLog (vehicle fleet tracker)
 
 Project context for Claude Code. Read this fully before making changes.
 
@@ -18,8 +18,8 @@ is the lens for every feature decision):
 ## Stack & live endpoints
 
 - **Frontend:** Vite + React 18, no router (tab state), no UI framework — hand-rolled CSS design system
-- **Hosting:** Netlify — site `vehicle-fleet-tracker`, siteId `6ff87f52-dc66-4b89-8ab8-b05fb9788a4a`
-  - Live: https://vehicle-fleet-tracker.netlify.app
+- **Hosting:** Netlify — site `motorlog`, siteId `6ff87f52-dc66-4b89-8ab8-b05fb9788a4a`
+  - Live: https://motorlog.netlify.app
 - **Backend:** Supabase — project ref `fxycfrtycqxdlhrpfeiv` (user's PERSONAL account)
   - URL: https://fxycfrtycqxdlhrpfeiv.supabase.co
   - Auth: email/password, single user. After the owner registered, public signups should be
@@ -51,7 +51,7 @@ is the lens for every feature decision):
 
 ## Current state (as of 2026-07-20, evening)
 
-- ✅ App deployed and serving at vehicle-fleet-tracker.netlify.app
+- ✅ App deployed and serving at motorlog.netlify.app
 - ✅ Auth works; user has an account
 - ✅ Schema `0001_init.sql` applied to `fxycfrtycqxdlhrpfeiv` (verified via REST probe)
 - ✅ Repo on GitHub: https://github.com/aaroncorvo/vehicle-fleet-tracker (branch `main`),
@@ -84,7 +84,7 @@ is the lens for every feature decision):
   `supabase/functions/google-drive/index.ts` with JWT verification **OFF** (it self-auths:
   user JWT or x-cron-secret); (3) secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   GDRIVE_CRON_SECRET (value must match the one baked into migration 0005); (4) user creates
-  the Google OAuth client (Web app, redirect URI exactly https://vehicle-fleet-tracker.netlify.app/,
+  the Google OAuth client (Web app, redirect URI exactly https://motorlog.netlify.app/,
   consent screen published to Production so refresh tokens don't expire weekly).
 - ⏳ Signups may still be open — check and disable in dashboard (owner account exists).
 - ⏳ The misplaced BlackOrchid project `dtztfigimyvpnzbqqwzw` (empty, $10/mo) still needs

@@ -116,7 +116,7 @@ export default function App() {
     <>
       <header className="hdr">
         <div>
-          <h1><span className="tick">///</span> FLEET</h1>
+          <h1><span className="tick">///</span> MOTORLOG</h1>
           <div className="sub">{vehicles.length} VEHICLES · TRACKED</div>
         </div>
         <button onClick={() => supabase.auth.signOut()}>SIGN OUT</button>
@@ -204,8 +204,8 @@ function AuthGate() {
 
   return (
     <div className="auth">
-      <h1><span className="tick">///</span> FLEET</h1>
-      <div className="tag">FUEL · SERVICE · MAINTENANCE — GX460 / IS350 / GX470 / FJ80</div>
+      <h1><span className="tick">///</span> MOTORLOG</h1>
+      <div className="tag">FUEL · SERVICE · MAINTENANCE · TCO</div>
       <div className="field">
         <label>Email</label>
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" inputMode="email" />

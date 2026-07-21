@@ -1,6 +1,6 @@
 {
-  "name": "FLEET — Vehicle Tracker",
-  "short_name": "FLEET",
+  "name": "MotorLog — Vehicle Tracker",
+  "short_name": "MotorLog",
   "description": "Fuel, service, maintenance, and TCO tracking",
   "start_url": "/",
   "display": "standalone",

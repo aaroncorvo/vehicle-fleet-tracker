@@ -98,7 +98,7 @@ function vehicleRecord(v: any, fuel: any[], svc: any[], maint: any[]) {
   const fuelSpend = fuel.reduce((s, r) => s + Number(r.total_cost ?? 0), 0);
   const svcSpend = svc.reduce((s, r) => s + Number(r.cost ?? 0), 0);
   const md: string[] = [`# ${v.year} ${v.make} ${v.model}` + (v.nickname ? ` "${v.nickname}"` : "")];
-  md.push("\n_Vehicle record from Fleet Tracker (vehicle-fleet-tracker.netlify.app)_\n", "## Identity");
+  md.push("\n_Vehicle record from Fleet Tracker (motorlog.netlify.app)_\n", "## Identity");
   const idRows: [string, unknown][] = [["VIN", v.vin], ["Engine", v.engine], ["Color", v.color], ["Plate", v.plate],
     ["Primary driver", v.primary_driver], ["Fuel", v.fuel_octane], ["Current odometer", `${odo.toLocaleString()} mi`]];
   for (const [k, val] of idRows) if (val) md.push(`- **${k}:** ${val}`);
