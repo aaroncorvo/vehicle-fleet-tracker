@@ -86,10 +86,65 @@ registration, roadside/membership card, warranty, or inspection slip).
 - Dates in YYYY-MM-DD; 2-digit years are 20xx.
 - Use null for anything not present. Do not guess values that are not on the document.`;
 
+// ---- parts mode (standard service parts for a known vehicle) ----
+const PARTS_SCHEMA = {
+  type: "object",
+  properties: {
+    parts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "What it is: 'Engine Oil', 'Oil Filter', 'Drain Plug Gasket'" },
+          spec: { type: ["string", "null"], description: "Factory spec: viscosity/grade/type, e.g. '0W-20 Full Synthetic (API SN+)'" },
+          qty: { type: ["string", "null"], description: "Quantity with unit, e.g. '8.0 qt with filter', '1'" },
+          part_number: { type: ["string", "null"], description: "OEM part number ONLY if highly confident it fits this exact vehicle; else null" },
+          uncertain: { type: "boolean", description: "true if the part number or spec should be verified before ordering" },
+        },
+        required: ["name", "spec", "qty", "part_number", "uncertain"],
+        additionalProperties: false,
+      },
+    },
+    notes: { type: ["string", "null"], description: "Fitment caveats worth showing the user (trim/engine variations, verify-before-order warnings)" },
+  },
+  required: ["parts", "notes"],
+  additionalProperties: false,
+};
+
+const partsPrompt = (vehicle: string, service: string) =>
+  `List the factory-standard parts and fluids needed to perform this service on this exact vehicle, for an owner doing the work themselves.
+
+Vehicle: ${vehicle}
+Service: ${service}
+
+- Include everything consumed by the job (fluid with capacity, filter, gaskets/crush washers, plugs, etc.).
+- spec = the factory requirement (viscosity, fluid type, grade) — not a brand.
+- part_number = OEM (Toyota/Lexus etc.) part number, but ONLY when you are highly
+  confident it fits this exact year/engine; otherwise null and set uncertain=true.
+- Owners will swap in preferred brands afterward; your job is the correct baseline spec.
+- If the service name doesn't consume parts (e.g. 'Tire Rotation'), return what's
+  typically checked/replaced with it or an empty list.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { media_type, data, mode } = await req.json();
+    const body = await req.json();
+    const { media_type, data, mode } = body;
+
+    if (mode === "parts") {
+      const { vehicle, service } = body;
+      if (!vehicle || !service) throw new Error("vehicle and service required");
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 2048,
+        output_config: { format: { type: "json_schema", schema: PARTS_SCHEMA } },
+        messages: [{ role: "user", content: partsPrompt(String(vehicle), String(service)) }],
+      });
+      if (msg.stop_reason === "refusal") throw new Error("Lookup refused");
+      const text = msg.content.find((b) => b.type === "text")?.text ?? "{}";
+      return new Response(text, { headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
     if (!media_type || !data) throw new Error("media_type and data (base64) required");
     const isDoc = mode === "document";
 

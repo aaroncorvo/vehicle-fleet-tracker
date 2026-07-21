@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { currentOdometer, maintenanceStatus, fmt } from '../lib/calc.js'
+import { suggestParts, suggestionToParts } from '../lib/parts.js'
 
 const ORDER = { overdue: 0, 'due-soon': 1, baseline: 2, ok: 3 }
 
@@ -33,7 +34,7 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
       </div>
 
       {(editItem || adding) ? (
-        <MaintForm item={editItem} vehicleId={vid} ownerId={vehicle?.user_id} currentOdo={odo}
+        <MaintForm item={editItem} vehicle={vehicle} vehicleId={vid} ownerId={vehicle?.user_id} currentOdo={odo}
           onDone={async (saved) => {
             setEditItem(null); setAdding(false)
             if (saved) { showToast('SAVED'); await refresh() }
@@ -69,7 +70,10 @@ export default function MaintenanceScreen({ vehicles, fuelLogs, serviceLogs, mai
 export function PartLine({ p }) {
   return (
     <div className="pline">
-      <span className="pname">{p.name}</span>
+      {p.url
+        ? <a className="pname plink" href={p.url} target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}>{p.name} ↗</a>
+        : <span className="pname">{p.name}</span>}
       {[p.spec, p.qty, p.part_number ? `PN ${p.part_number}` : null]
         .filter(Boolean).map((x, i) => <span key={i}> · {x}</span>)}
     </div>
@@ -101,7 +105,7 @@ function StatusLine({ m, st }) {
   return <>{parts}</>
 }
 
-function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
+function MaintForm({ item, vehicle, vehicleId, ownerId, currentOdo, onDone }) {
   const [f, setF] = useState({
     name: item?.name || '',
     interval_miles: item?.interval_miles ?? '',
@@ -113,10 +117,27 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
   })
   const [parts, setParts] = useState(item?.parts?.length ? item.parts : [])
   const [busy, setBusy] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestNote, setSuggestNote] = useState(null)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
   const setPart = (i, k, v) => setParts(ps => ps.map((p, j) => j === i ? { ...p, [k]: v } : p))
-  const addPart = () => setParts(ps => [...ps, { name: '', spec: '', qty: '', part_number: '' }])
+  const addPart = () => setParts(ps => [...ps, { name: '', spec: '', qty: '', part_number: '', url: '' }])
   const rmPart = (i) => setParts(ps => ps.filter((_, j) => j !== i))
+
+  const suggest = async () => {
+    setSuggesting(true); setSuggestNote(null)
+    try {
+      const result = await suggestParts(vehicle, f.name)
+      const rows = suggestionToParts(result)
+      if (!rows.length) setSuggestNote('No standard parts found for this service.')
+      else {
+        // keep rows the user already filled in; append the factory baseline
+        setParts(ps => [...ps.filter(p => p.name || p.spec || p.qty || p.part_number || p.url), ...rows])
+        setSuggestNote(result.notes || 'Factory baseline loaded — swap in your preferred brands and add product links.')
+      }
+    } catch (e) { setSuggestNote('Lookup failed: ' + e.message) }
+    setSuggesting(false)
+  }
 
   const save = async () => {
     setBusy(true)
@@ -192,6 +213,11 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
       <div className="field">
         <label>Parts & Fluids for This Service</label>
       </div>
+      <button className="btn-sm" onClick={suggest} disabled={suggesting || !f.name}
+        style={{ marginBottom: 10, color: 'var(--amber)', borderColor: 'rgba(255,176,0,0.4)' }}>
+        {suggesting ? 'LOOKING UP…' : `✦ SUGGEST STANDARD PARTS FOR ${(vehicle?.name || 'VEHICLE').toUpperCase()}`}
+      </button>
+      {suggestNote && <div className="note" style={{ marginBottom: 10 }}>{suggestNote}</div>}
       {parts.map((p, i) => (
         <div className="partrow" key={i}>
           <div className="frow">
@@ -212,6 +238,10 @@ function MaintForm({ item, vehicleId, ownerId, currentOdo, onDone }) {
               <button className="btn-sm" onClick={() => rmPart(i)} aria-label="Remove part"
                 style={{ width: 38, flexShrink: 0, color: 'var(--red)', borderColor: 'rgba(255,77,77,0.35)' }}>✕</button>
             </div>
+          </div>
+          <div className="field">
+            <input type="url" inputMode="url" value={p.url || ''} onChange={e => setPart(i, 'url', e.target.value)}
+              placeholder="https:// product link — your preferred brand (optional)" />
           </div>
         </div>
       ))}

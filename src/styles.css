@@ -698,3 +698,4 @@ input[type="checkbox"] {
 .partrow { border-top: 1px dashed var(--line); padding-top: 10px; margin-bottom: 2px; }
 .agenda-row.expandable { cursor: pointer; }
 .agenda-more { color: var(--amber); }
+.pline .plink { color: var(--amber); text-decoration: none; border-bottom: 1px dotted rgba(255,176,0,0.5); }
