@@ -26,7 +26,7 @@ export default function ProfileScreen({ vehicles, vid, setVid, fuelLogs, service
       )}
 
       <div className="section-label">OBD-II Link</div>
-      <ObdPanel vehicle={vehicle} />
+      <ObdPanel vehicle={vehicle} refresh={refresh} showToast={showToast} />
 
       <div className="section-label">Updates & Repairs</div>
       {recent.length === 0 && (

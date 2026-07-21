@@ -44,13 +44,13 @@ export function parsePid(raw, pid) {
   return def ? def.decode(a, Number.isNaN(b) ? 0 : b) : null
 }
 
-// Decode mode-03 stored DTCs. Handles CAN ('4302' + pairs, count byte first)
-// and legacy ('43' + raw pairs, zero-padded) framings.
-export function decodeDtcs(raw) {
+// Decode mode-03 (stored, '43') or mode-07 (pending, '47') DTC responses.
+// Handles CAN (count byte first) and legacy (zero-padded) framings.
+export function decodeDtcs(raw, marker = '43') {
   const s = cleanElm(raw)
-  const i = s.indexOf('43')
+  const i = s.indexOf(marker)
   if (i < 0) return []
-  let data = s.slice(i + 2)
+  let data = s.slice(i + marker.length)
   // CAN frames include a count byte; if it matches the remaining pair count, drop it
   if (data.length >= 2) {
     const maybeCount = parseInt(data.slice(0, 2), 16)
@@ -138,9 +138,12 @@ export class ObdConnection {
   }
 
   async readDtcs() {
-    return decodeDtcs(await this.send('03'))
+    const stored = decodeDtcs(await this.send('03'), '43')
+    const pending = decodeDtcs(await this.send('07'), '47')
+    return { stored, pending }
   }
 
+  // Mode 04: clears codes AND resets emissions readiness monitors.
   async clearDtcs() {
     await this.send('04')
   }

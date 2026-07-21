@@ -151,6 +151,45 @@ async function ocrAllowed(req: Request): Promise<boolean> {
   }
 }
 
+// ---- dtc mode (diagnose check-engine codes for a known vehicle) ----
+const DTC_SCHEMA = {
+  type: "object",
+  properties: {
+    codes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          code: { type: "string" },
+          meaning: { type: "string", description: "What this code means on THIS engine, one plain sentence" },
+          severity: { type: "string", enum: ["info", "moderate", "serious", "stop-driving"] },
+          likely_causes: { type: "array", items: { type: "string" }, description: "Ordered most→least likely for this exact engine" },
+          diy: { type: "string", description: "Realistic DIY path: what to check/replace first, rough difficulty" },
+          urgency: { type: "string", description: "Can it be driven? For how long? What gets damaged if ignored?" },
+        },
+        required: ["code", "meaning", "severity", "likely_causes", "diy", "urgency"],
+        additionalProperties: false,
+      },
+    },
+    summary: { type: ["string", "null"], description: "If codes are related, the one-paragraph unified diagnosis; else null" },
+  },
+  required: ["codes", "summary"],
+  additionalProperties: false,
+};
+
+const dtcPrompt = (vehicle: string, codes: string[]) =>
+  `Diagnose these OBD-II trouble codes for this exact vehicle, for a technically fluent owner who does his own work.
+
+Vehicle: ${vehicle}
+Codes: ${codes.join(", ")}
+
+- meaning/likely_causes must be specific to this engine where the code has a known
+  pattern on it (e.g. known failure modes on this platform), generic SAE otherwise.
+- severity: 'stop-driving' only for genuine damage risk (flashing-CEL-grade misfire,
+  oil pressure, overheating). Be honest, not alarmist.
+- If multiple codes share one root cause, explain that in summary and keep the
+  per-code entries short.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -162,6 +201,20 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Scanning requires a paid plan — upgrade in Settings." }),
         { status: 402, headers: { ...CORS, "Content-Type": "application/json" } },
       );
+    }
+
+    if (mode === "dtc") {
+      const { vehicle, codes } = body;
+      if (!vehicle || !Array.isArray(codes) || codes.length === 0) throw new Error("vehicle and codes[] required");
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 3072,
+        output_config: { format: { type: "json_schema", schema: DTC_SCHEMA } },
+        messages: [{ role: "user", content: dtcPrompt(String(vehicle), codes.map(String)) }],
+      });
+      if (msg.stop_reason === "refusal") throw new Error("Diagnosis refused");
+      const text = msg.content.find((b) => b.type === "text")?.text ?? "{}";
+      return new Response(text, { headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
     if (mode === "parts") {

@@ -699,3 +699,25 @@ input[type="checkbox"] {
 .agenda-row.expandable { cursor: pointer; }
 .agenda-more { color: var(--amber); }
 .pline .plink { color: var(--amber); text-decoration: none; border-bottom: 1px dotted rgba(255,176,0,0.5); }
+
+/* ===== DTC diagnosis rows ===== */
+.dtcrow { border-top: 1px solid var(--line); padding: 10px 0; }
+.dtcrow:first-child { border-top: none; }
+.dtchead { display: flex; align-items: center; gap: 8px; }
+.dtcsev {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
+  padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line-bright);
+}
+.sev-info { color: var(--text-dim); }
+.sev-moderate { color: var(--amber-hi); border-color: rgba(255, 176, 0, 0.45); }
+.sev-serious { color: #FF7A73; border-color: rgba(255, 90, 82, 0.45); }
+.sev-stop-driving {
+  color: #fff; background: var(--red); border-color: var(--red);
+  box-shadow: 0 0 10px rgba(255, 77, 77, 0.5);
+}
+.dtcdesc { font-size: 14px; color: var(--text); margin-top: 6px; }
+.dtcdetail {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint);
+  margin-top: 6px; display: grid; gap: 3px;
+}
+.dtcdetail b { color: var(--text-dim); font-weight: 600; }

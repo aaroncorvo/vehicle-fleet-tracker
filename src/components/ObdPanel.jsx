@@ -1,15 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase.js'
 import { bleSupported, ObdConnection, PIDS } from '../lib/obd.js'
+import { describeDtc, explainDtcs } from '../lib/dtc.js'
 
 const LIVE_PIDS = ['0C', '0D', '05', '2F', '42']
 
-// Live OBD-II link over BLE. Works today in Chrome (desktop/Android);
-// iPhone support arrives with the Capacitor app via the same protocol layer.
-export default function ObdPanel({ vehicle }) {
+// Live OBD-II link over BLE: gauges, read/understand/clear check-engine codes.
+// Works today in Chrome (desktop/Android); iPhone arrives with the Capacitor app.
+export default function ObdPanel({ vehicle, refresh, showToast }) {
   const [state, setState] = useState('idle')   // idle | connecting | live | error
   const [deviceName, setDeviceName] = useState(null)
   const [vals, setVals] = useState({})
-  const [dtcs, setDtcs] = useState(null)       // null = not read yet
+  const [dtcs, setDtcs] = useState(null)       // null = not read; {stored, pending}
+  const [diag, setDiag] = useState(null)       // AI diagnosis result
+  const [busyBtn, setBusyBtn] = useState(null) // 'read' | 'explain' | 'clear' | 'log'
   const [err, setErr] = useState(null)
   const connRef = useRef(null)
   const pollRef = useRef(null)
@@ -18,7 +22,7 @@ export default function ObdPanel({ vehicle }) {
     clearInterval(pollRef.current)
     connRef.current?.disconnect()
     connRef.current = null
-    setState('idle'); setVals({}); setDtcs(null); setDeviceName(null)
+    setState('idle'); setVals({}); setDtcs(null); setDiag(null); setDeviceName(null)
   }
   useEffect(() => stop, [])                    // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { stop() }, [vehicle.id])    // eslint-disable-line react-hooks/exhaustive-deps
@@ -41,13 +45,60 @@ export default function ObdPanel({ vehicle }) {
       }, 1200)
     } catch (e) {
       setErr(e.message)
-      setState(e.name === 'NotFoundError' ? 'idle' : 'error')  // user cancelled chooser
+      setState(e.name === 'NotFoundError' ? 'idle' : 'error')
     }
   }
 
   const readCodes = async () => {
+    setBusyBtn('read'); setErr(null); setDiag(null)
     try { setDtcs(await connRef.current.readDtcs()) }
     catch (e) { setErr('Code read failed: ' + e.message) }
+    setBusyBtn(null)
+  }
+
+  const allCodes = dtcs ? [...new Set([...dtcs.stored, ...dtcs.pending])] : []
+
+  const explain = async () => {
+    setBusyBtn('explain'); setErr(null)
+    try { setDiag(await explainDtcs(vehicle, allCodes)) }
+    catch (e) { setErr('Diagnosis failed: ' + e.message) }
+    setBusyBtn(null)
+  }
+
+  const clearCodes = async () => {
+    if (!confirm(
+      'Clear check-engine codes?\n\n' +
+      'This erases stored + pending codes AND resets emissions readiness monitors — ' +
+      'the vehicle may fail state inspection until several drive cycles complete. ' +
+      'If the underlying fault remains, the light will come back.'
+    )) return
+    setBusyBtn('clear'); setErr(null)
+    try {
+      await connRef.current.clearDtcs()
+      setDtcs(await connRef.current.readDtcs())
+      setDiag(null)
+      showToast('CODES CLEARED — MONITORS RESET')
+    } catch (e) { setErr('Clear failed: ' + e.message) }
+    setBusyBtn(null)
+  }
+
+  const logToHistory = async () => {
+    setBusyBtn('log')
+    const lines = allCodes.map(c => {
+      const d = diag?.codes?.find(x => x.code === c)
+      return `${c}${dtcs.pending.includes(c) && !dtcs.stored.includes(c) ? ' (pending)' : ''} — ${d?.meaning || describeDtc(c)}`
+    })
+    if (diag?.summary) lines.push('Diagnosis: ' + diag.summary)
+    const { error } = await supabase.from('service_logs').insert({
+      user_id: vehicle.user_id, vehicle_id: vehicle.id,
+      serviced_at: new Date().toISOString().slice(0, 10),
+      service_type: 'Diagnostics', cost: 0,
+      notes: 'OBD-II scan: ' + (lines.length ? lines.join(' · ') : 'no stored codes'),
+    })
+    setBusyBtn(null)
+    if (error) { setErr('Log failed: ' + error.message); return }
+    showToast('LOGGED TO SERVICE HISTORY')
+    await refresh()
   }
 
   if (!bleSupported()) {
@@ -71,7 +122,8 @@ export default function ObdPanel({ vehicle }) {
           </button>
           <div className="note" style={{ marginTop: 10 }}>
             Plug a BLE dongle (Vgate iCar Pro BLE, OBDLink CX, Veepeak BLE+) into the
-            OBD port, turn the ignition on, then connect. Live data + check-engine codes.
+            OBD port, turn the ignition on, then connect. Live data, check-engine
+            code diagnosis, and code clearing.
           </div>
           {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
         </>
@@ -93,13 +145,59 @@ export default function ObdPanel({ vehicle }) {
             ))}
           </div>
           <div style={{ height: 12 }} />
-          <button className="btn2" onClick={readCodes}>READ CHECK-ENGINE CODES</button>
+          <button className="btn2" onClick={readCodes} disabled={busyBtn === 'read'}>
+            {busyBtn === 'read' ? 'READING…' : 'READ CHECK-ENGINE CODES'}
+          </button>
+
           {dtcs !== null && (
-            dtcs.length === 0
-              ? <div className="note" style={{ marginTop: 8, color: 'var(--green)' }}>No stored codes.</div>
-              : <div className="flagrow">
-                  {dtcs.map(c => <span className="flag overdue" key={c}>● {c}</span>)}
+            allCodes.length === 0 ? (
+              <div className="note" style={{ marginTop: 8, color: 'var(--green)' }}>
+                No stored or pending codes. All clear.
+              </div>
+            ) : (
+              <>
+                <div style={{ marginTop: 10 }}>
+                  {allCodes.map(c => {
+                    const d = diag?.codes?.find(x => x.code === c)
+                    const pendingOnly = dtcs.pending.includes(c) && !dtcs.stored.includes(c)
+                    return (
+                      <div key={c} className="dtcrow">
+                        <div className="dtchead">
+                          <span className={'flag ' + (pendingOnly ? 'due-soon' : 'overdue')}>
+                            {pendingOnly ? '◐ ' : '● '}{c}{pendingOnly ? ' PENDING' : ''}
+                          </span>
+                          {d && <span className={'dtcsev sev-' + d.severity}>{d.severity.toUpperCase()}</span>}
+                        </div>
+                        <div className="dtcdesc">{d?.meaning || describeDtc(c)}</div>
+                        {d && (
+                          <div className="dtcdetail">
+                            <div><b>Likely causes:</b> {d.likely_causes.join(' → ')}</div>
+                            <div><b>DIY:</b> {d.diy}</div>
+                            <div><b>Urgency:</b> {d.urgency}</div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {diag?.summary && <div className="note" style={{ marginTop: 8 }}>{diag.summary}</div>}
                 </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  {!diag && (
+                    <button className="btn2" style={{ flex: 1, color: 'var(--amber)', borderColor: 'rgba(255,176,0,0.4)' }}
+                      onClick={explain} disabled={busyBtn === 'explain'}>
+                      {busyBtn === 'explain' ? 'DIAGNOSING…' : `✦ DIAGNOSE FOR ${(vehicle.name || '').toUpperCase()}`}
+                    </button>
+                  )}
+                  <button className="btn2" style={{ flex: 1 }} onClick={logToHistory} disabled={busyBtn === 'log'}>
+                    {busyBtn === 'log' ? 'LOGGING…' : 'LOG TO HISTORY'}
+                  </button>
+                  <button className="btn2" style={{ flex: 1, color: 'var(--red)', borderColor: 'rgba(255,77,77,0.4)' }}
+                    onClick={clearCodes} disabled={busyBtn === 'clear'}>
+                    {busyBtn === 'clear' ? 'CLEARING…' : 'CLEAR CODES'}
+                  </button>
+                </div>
+              </>
+            )
           )}
           {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
         </>
