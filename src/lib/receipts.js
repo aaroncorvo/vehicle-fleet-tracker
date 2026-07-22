@@ -62,3 +62,40 @@ export function extractionToService(x) {
       .filter(Boolean).join(' · '),
   }
 }
+
+// Map an OCR extraction to the fuel fill-up form fields. Pure — regression-tested.
+// Fuel receipts rarely itemize gallons in the structured extraction, so we do NOT
+// guess gallons: the form's own auto-derive (total + $/gal → gallons) handles it.
+export function extractionToFuel(x) {
+  return {
+    filled_at: x.receipt_date || new Date().toISOString().slice(0, 10),
+    odometer: x.odometer != null ? String(x.odometer) : '',
+    total_cost: x.total != null ? String(x.total) : '',
+    brand: x.vendor || '',
+    location: x.location || '',
+  }
+}
+
+// Does this PostgREST/Postgres error mean the receipts.fuel_log_id column is
+// missing (migration 0014 not yet applied)? Pure — lets callers degrade the
+// insert gracefully (save the receipt row unlinked rather than losing it).
+export function isMissingFuelLogIdColumn(error) {
+  const m = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
+  return /fuel_log_id/.test(m) &&
+    /(column|does not exist|schema cache|could not find|find the)/i.test(m)
+}
+
+// Insert a receipts row linked to a fuel_logs row. If the fuel_log_id column is
+// missing, retry without it so the receipt is still saved (just unlinked).
+// Returns { error, linked, degraded }.
+export async function insertFuelReceipt(row) {
+  const { error } = await supabase.from('receipts').insert(row)
+  if (error && isMissingFuelLogIdColumn(error)) {
+    const { fuel_log_id, ...rest } = row
+    const { error: retryErr } = await supabase.from('receipts').insert(rest)
+    if (retryErr) return { error: retryErr, linked: false, degraded: false }
+    return { error: null, linked: false, degraded: true }
+  }
+  if (error) return { error, linked: false, degraded: false }
+  return { error: null, linked: true, degraded: false }
+}

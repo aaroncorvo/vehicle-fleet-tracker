@@ -37,35 +37,72 @@ function maintStatus(item: any, odo: number, today = new Date()) {
   return { level: overdue ? "OVERDUE" : "DUE SOON", remainMiles, remainDays };
 }
 
+type NotifRow = { user_id: string; vehicle_id: string | null; kind: string; dedupe_key: string; message: string };
+
 async function buildDigest(ownerId: string) {
   const rows = (q: any) => q.then((r: any) => r.data ?? []);
-  const [vehicles, fuel, svc, maint, recalls, docs] = await Promise.all([
+  // NOTE: supabase-js resolves (never rejects) on a missing table — rows() then yields []
+  // so reminders/notifications not existing yet just make those queries empty, no crash.
+  const [vehicles, fuel, svc, maint, recalls, docs, reminders] = await Promise.all([
     rows(admin.from("vehicles").select("*").eq("user_id", ownerId).eq("archived", false).order("sort_order")),
     rows(admin.from("fuel_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
     rows(admin.from("service_logs").select("vehicle_id,odometer").eq("user_id", ownerId)),
     rows(admin.from("maintenance_items").select("*").eq("user_id", ownerId)),
     rows(admin.from("recalls").select("*").eq("user_id", ownerId).eq("status", "open")),
     rows(admin.from("driver_docs").select("*").eq("user_id", ownerId).not("expires_on", "is", null)),
-  ]).catch(() => [[], [], [], [], [], []]);
+    rows(admin.from("reminders").select("*").eq("user_id", ownerId).is("completed_at", null)),
+  ]).catch(() => [[], [], [], [], [], [], []]);
 
   const sections: { vehicle_id: string | null; vehicle: string; lines: string[] }[] = [];
+  // one inbox row per digest item, deduped by dedupe_key (feature b)
+  const notif: NotifRow[] = [];
+  const today = new Date();
+
   for (const v of vehicles) {
     const odo = Math.max(v.base_odometer ?? 0,
       ...fuel.filter((r: any) => r.vehicle_id === v.id).map((r: any) => r.odometer),
       ...svc.filter((r: any) => r.vehicle_id === v.id).map((r: any) => r.odometer ?? 0), 0);
     const lines: string[] = [];
     for (const r of recalls.filter((r: any) => r.vehicle_id === v.id)) {
-      lines.push(`RECALL OPEN — ${(r.component || "").split(":").pop() || "recall"} (NHTSA ${r.campaign})`);
+      const msg = `RECALL OPEN — ${(r.component || "").split(":").pop() || "recall"} (NHTSA ${r.campaign})`;
+      lines.push(msg);
+      notif.push({ user_id: ownerId, vehicle_id: v.id, kind: "recall", dedupe_key: `digest:recall:${r.campaign}`, message: msg });
     }
     for (const m of maint.filter((m: any) => m.vehicle_id === v.id)) {
-      const st = maintStatus(m, odo);
+      const st = maintStatus(m, odo, today);
       if (!st) continue;
       const bits = [];
       if (st.remainMiles != null) bits.push(st.remainMiles <= 0 ? `${Math.abs(st.remainMiles).toLocaleString()} mi over` : `${st.remainMiles.toLocaleString()} mi left`);
       if (st.remainDays != null) bits.push(st.remainDays <= 0 ? `${Math.abs(st.remainDays)} days over` : `${st.remainDays} days left`);
-      lines.push(`${st.level} — ${m.name} (${bits.join(", ")})${m.part_number ? ` [PN ${m.part_number}]` : ""}`);
+      const msg = `${st.level} — ${m.name} (${bits.join(", ")})${m.part_number ? ` [PN ${m.part_number}]` : ""}`;
+      lines.push(msg);
+      // stable "due target" so the key is unchanged until the item is actually serviced/rolled
+      let dueKey: string;
+      if (st.remainMiles != null) dueKey = `${(m.last_done_miles ?? 0) + (m.interval_miles ?? 0)}mi`;
+      else { const d = new Date(m.last_done_date); d.setMonth(d.getMonth() + (m.interval_months ?? 0)); dueKey = d.toISOString().slice(0, 10); }
+      notif.push({ user_id: ownerId, vehicle_id: v.id, kind: "maintenance", dedupe_key: `digest:maint:${m.id}:${dueKey}`, message: msg });
     }
     if (lines.length) sections.push({ vehicle_id: v.id, vehicle: `${v.name}${v.nickname ? ` "${v.nickname}"` : ""} @ ${odo.toLocaleString()} mi`, lines });
+  }
+
+  // user-defined reminders (registration, inspection, seasonal) — each within its own window
+  for (const rm of reminders ?? []) {
+    const days = Math.round((new Date(rm.due_date).getTime() - today.getTime()) / 86400000);
+    if (days > (rm.remind_days_before ?? 14)) continue;   // still outside its reminder window
+    const veh = vehicles.find((v: any) => v.id === rm.vehicle_id);
+    const level = days < 0 ? "OVERDUE" : "DUE SOON";
+    const when = days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? "due today" : `in ${days} days`;
+    const msg = `${level} — ${rm.title} (${when}, ${rm.due_date})`;
+    if (rm.vehicle_id && veh) {
+      let sec = sections.find((s) => s.vehicle_id === veh.id);
+      if (!sec) { sec = { vehicle_id: veh.id, vehicle: `${veh.name}${veh.nickname ? ` "${veh.nickname}"` : ""}`, lines: [] }; sections.push(sec); }
+      sec.lines.push(msg);
+    } else {
+      let sec = sections.find((s) => s.vehicle_id === null);
+      if (!sec) { sec = { vehicle_id: null, vehicle: "Fleet-wide", lines: [] }; sections.push(sec); }
+      sec.lines.push(msg);
+    }
+    notif.push({ user_id: ownerId, vehicle_id: (rm.vehicle_id && veh) ? rm.vehicle_id : null, kind: "reminder", dedupe_key: `digest:reminder:${rm.id}:${rm.due_date}`, message: msg });
   }
 
   // expiring glovebox documents — attached to their vehicle's section (or fleet-wide)
@@ -83,8 +120,81 @@ async function buildDigest(ownerId: string) {
       if (!sec) { sec = { vehicle_id: null, vehicle: "Documents (fleet-wide)", lines: [] }; sections.push(sec); }
       sec.lines.push(line);
     }
+    notif.push({ user_id: ownerId, vehicle_id: d.vehicle_id ?? null, kind: "document", dedupe_key: `digest:document:${d.id}:${d.expires_on}`, message: line });
   }
-  return sections;
+  return { sections, notif };
+}
+
+// idempotent inbox insert via PostgREST on-conflict-do-nothing (feature b). Swallows ALL errors,
+// including the table not existing yet — the inbox is best-effort, it must never fail the run.
+async function insertNotifications(items: NotifRow[]) {
+  if (!items.length) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications?on_conflict=dedupe_key`, {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal",
+      },
+      body: JSON.stringify(items),
+    });
+  } catch (e) {
+    console.error("[alerts] inbox insert failed:", String(e));
+  }
+}
+
+// Push one digest (or a test) to a single webhook provider. 5s timeout; throws on network
+// failure or non-2xx so callers can log (digest) or surface (test). Never called without a caught scope.
+async function sendToProvider(prov: any, lines: string[]) {
+  const url = prov?.config?.url;
+  if (!url) throw new Error("provider has no url configured");
+  const n = lines.length;
+  const plural = n === 1 ? "" : "s";
+  let opts: RequestInit;
+  if (prov.type === "ntfy") {
+    // ntfy headers must be latin-1 safe, so the Title uses a hyphen (not an em dash).
+    opts = {
+      method: "POST",
+      headers: { Title: `MotorLog - ${n} item${plural} need attention`, Priority: "default", Tags: "wrench" },
+      body: lines.join("\n"),
+    };
+  } else if (prov.type === "discord") {
+    opts = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: ("**MotorLog**\n" + lines.join("\n")).slice(0, 1900) }),
+    };
+  } else { // generic webhook
+    opts = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: `MotorLog — ${n} item${plural} need attention`, items: lines }),
+    };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    if (!res.ok) throw new Error(`${prov.type} responded ${res.status}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Dispatch the digest summary to the OWNER's enabled webhook providers (feature c, v1 scope).
+// Owner-scoped: they see every fleet item. Failures are logged, never thrown.
+async function dispatchProviders(ownerId: string, sections: { lines: string[] }[]) {
+  const lines = sections.flatMap((s) => s.lines);
+  if (!lines.length) return;
+  const providers = await admin.from("notification_providers").select("*")
+    .eq("user_id", ownerId).eq("enabled", true)
+    .then((r: any) => r.data ?? [], () => []);
+  for (const p of providers) {
+    try { await sendToProvider(p, lines); }
+    catch (e) { console.error(`[alerts] provider ${p.id} (${p.type}) dispatch failed:`, String(e)); }
+  }
 }
 
 function renderEmail(sections: { vehicle: string; lines: string[] }[]) {
@@ -125,8 +235,10 @@ async function runForOwner(ownerId: string, force = false) {
   const freq = prefs?.frequency ?? "weekly";
   if (!force && freq === "off") return { sent: false, reason: "alerts off" };
 
-  const sections = await buildDigest(ownerId);
+  const { sections, notif } = await buildDigest(ownerId);
   if (!sections.length) return { sent: false, reason: "nothing due" };
+  // in-app inbox is populated on every build (idempotent), independent of email throttling
+  await insertNotifications(notif);
   const hash = JSON.stringify(sections);
   const { data: state } = await admin.from("alert_state").select("last_hash").eq("user_id", ownerId).maybeSingle();
 
@@ -143,6 +255,11 @@ async function runForOwner(ownerId: string, force = false) {
       return { sent: false, reason: "unchanged" };
     }
   }
+
+  // webhook push (ntfy / Discord / generic) to the owner's channels — alongside email,
+  // fired once the digest is due; runs even if Resend isn't configured (push-only setups).
+  await dispatchProviders(ownerId, sections);
+
   if (!RESEND_KEY) return { sent: false, reason: "RESEND_API_KEY not set" };
 
   // per-recipient vehicle scope: group identical scopes, send one email per group
@@ -206,6 +323,16 @@ Deno.serve(async (req) => {
     const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
     const { data } = await admin.auth.getUser(jwt);
     if (!data?.user) return json({ error: "unauthorized" }, 401);
+
+    // in-app "test channel" button: send one message to a provider owned by the caller
+    if (body.action === "test-provider") {
+      const { data: prov } = await admin.from("notification_providers")
+        .select("*").eq("id", body.provider_id).eq("user_id", data.user.id).maybeSingle();
+      if (!prov) return json({ error: "provider not found" }, 404);
+      try { await sendToProvider(prov, ["MotorLog test — channel working"]); return json({ ok: true }); }
+      catch (e) { return json({ error: String((e as Error)?.message ?? e) }); }
+    }
+
     const { data: v } = await admin.from("vehicles").select("user_id").limit(1);
     const ownerId = body.owner_id ?? v?.[0]?.user_id ?? data.user.id;
     return json(await runForOwner(ownerId, true));

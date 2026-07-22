@@ -1,4 +1,11 @@
 import { supabase } from './supabase.js'
+import { pushNotification } from './notifications.js'
+
+// Trim a recall down to a headline-length blurb for the notification message.
+function recallBlurb(r) {
+  const s = (r.Component || r.Summary || '').replace(/\s+/g, ' ').trim()
+  return s.length > 90 ? s.slice(0, 87) + '…' : s
+}
 
 // NHTSA recalls API has no CORS — proxied via netlify.toml (/nhtsa/* -> api.nhtsa.gov/*).
 // Model naming differs from ours ("GX 460" vs "GX460"), so try variants until one hits.
@@ -41,6 +48,19 @@ export async function syncRecalls(vehicle, existing) {
     raw: r,
   })))
   if (error) throw error
+  // Also drop an inbox notification per newly-found recall. Deduped on
+  // recall:<vehicle_id>:<campaign>; errors swallowed so the sweep never breaks
+  // (the notifications table may not exist yet).
+  const label = vehicle.nickname || vehicle.name || vehicle.model
+  try {
+    await Promise.all(fresh.map(r => pushNotification({
+      ownerId: vehicle.user_id,
+      vehicleId: vehicle.id,
+      kind: 'recall',
+      dedupeKey: `recall:${vehicle.id}:${r.NHTSACampaignNumber}`,
+      message: `⚠ New recall on ${label}: ${recallBlurb(r)}`,
+    })))
+  } catch { /* notifications are best-effort */ }
   return fresh.length
 }
 

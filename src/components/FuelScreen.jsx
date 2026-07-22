@@ -1,26 +1,83 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeMpg, fuelStats, maintenanceStatus, fmt } from '../lib/calc.js'
+import { prepareReceiptFile, uploadReceipt, ocrReceipt, receiptUrl, extractionToFuel, insertFuelReceipt } from '../lib/receipts.js'
 import MpgChart from './MpgChart.jsx'
 
 export default function FuelScreen({ vehicles, fuelLogs, maintItems, vid, setVid, refresh, showToast }) {
   const [showForm, setShowForm] = useState(false)
+  const [prefill, setPrefill] = useState(null)   // { initial, receipt } from a scan
+  const [scanning, setScanning] = useState(false)
+  const [receipts, setReceipts] = useState([])       // self-fetched: id, fuel_log_id, file_path
+  const [receiptsError, setReceiptsError] = useState(false)
+  const fileRef = useRef(null)
   const mpgMap = useMemo(() => computeMpg(fuelLogs), [fuelLogs])
   const vlogs = fuelLogs.filter(l => l.vehicle_id === vid).sort((a, b) => b.odometer - a.odometer)
   const fs = fuelStats(fuelLogs, vid)
   const vehicle = vehicles.find(v => v.id === vid)
 
+  // FuelScreen doesn't receive receipts as a prop — self-fetch the linked rows
+  // so the history list can show a ⌁ indicator. Only fuel-linked rows, minimal cols.
+  const loadReceipts = useCallback(async () => {
+    const { data, error } = await supabase.from('receipts')
+      .select('id, fuel_log_id, file_path')
+      .not('fuel_log_id', 'is', null)
+    if (error) { setReceiptsError(true); setReceipts([]); return }
+    setReceiptsError(false); setReceipts(data || [])
+  }, [])
+  useEffect(() => { loadReceipts() }, [loadReceipts])
+  useEffect(() => { setShowForm(false); setPrefill(null) }, [vid])
+
+  const receiptFor = (logId) => receipts.find(r => r.fuel_log_id === logId)
+
+  const scan = async (file) => {
+    if (!file) return
+    setScanning(true)
+    try {
+      const prepared = await prepareReceiptFile(file)
+      // upload and OCR in parallel — neither depends on the other
+      const [path, extracted] = await Promise.all([
+        uploadReceipt(prepared, vid),
+        ocrReceipt(prepared),
+      ])
+      setPrefill({ initial: extractionToFuel(extracted), receipt: { path, extracted } })
+      setShowForm(true)
+      showToast('RECEIPT READ — REVIEW & SAVE')
+    } catch (e) {
+      showToast('SCAN FAILED: ' + e.message)
+    }
+    setScanning(false)
+  }
+
+  const viewReceipt = async (r) => {
+    try { window.open(await receiptUrl(r.file_path), '_blank') }
+    catch (e) { showToast('ERROR: ' + e.message) }
+  }
+
   return (
     <>
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment"
+        style={{ display: 'none' }} onChange={e => { scan(e.target.files[0]); e.target.value = '' }} />
+
       {!showForm && (
-        <button className="btn" onClick={() => setShowForm(true)} style={{ marginBottom: 16 }}>
-          + LOG FILL-UP
-        </button>
+        <>
+          <button className="btn" onClick={() => { setPrefill(null); setShowForm(true) }} style={{ marginBottom: 8 }}>
+            + LOG FILL-UP
+          </button>
+          <button className="btn2" onClick={() => fileRef.current.click()} disabled={scanning}
+            style={{ marginBottom: 16 }}>
+            {scanning ? 'READING RECEIPT…' : '⌁ SCAN PUMP RECEIPT'}
+          </button>
+        </>
       )}
       {showForm && (
         <FuelForm vehicle={vehicle} lastOdo={vlogs[0]?.odometer}
           maintItems={(maintItems || []).filter(m => m.vehicle_id === vid)}
-          onDone={async (saved) => { setShowForm(false); if (saved) { showToast('FILL LOGGED'); await refresh() } }} />
+          initial={prefill?.initial} receipt={prefill?.receipt} showToast={showToast}
+          onDone={async (saved, hadReceipt) => {
+            setShowForm(false); setPrefill(null)
+            if (saved) { showToast('FILL LOGGED'); await refresh(); if (hadReceipt) await loadReceipts() }
+          }} />
       )}
 
       {fs && (
@@ -45,11 +102,16 @@ export default function FuelScreen({ vehicles, fuelLogs, maintItems, vid, setVid
       {vlogs.length === 0 && <div className="empty">NO FILLS LOGGED</div>}
       {vlogs.map(l => {
         const c = mpgMap.get(l.id)
+        const receipt = receiptFor(l.id)
         return (
           <div className="logrow" key={l.id}>
             <div className="lmain">
               <div className="lt">{fmt.num(l.odometer)} mi
                 {l.fill_type !== 'full' && <span style={{ color: 'var(--text-faint)', fontSize: 12 }}> · {l.fill_type.toUpperCase()}</span>}
+                {receipt && (
+                  <span role="button" title="View receipt" onClick={() => viewReceipt(receipt)}
+                    style={{ color: 'var(--amber)', cursor: 'pointer', marginLeft: 6 }}> ⌁</span>
+                )}
               </div>
               <div className="ls">
                 {l.filled_at}{l.brand ? ' · ' + l.brand : ''}{l.total_cost ? ' · ' + fmt.money(l.total_cost) : ''}
@@ -68,12 +130,22 @@ export default function FuelScreen({ vehicles, fuelLogs, maintItems, vid, setVid
   )
 }
 
-function FuelForm({ vehicle, lastOdo, maintItems, onDone }) {
+function FuelForm({ vehicle, lastOdo, maintItems, initial, receipt, showToast, onDone }) {
   const today = new Date().toISOString().slice(0, 10)
-  const [f, setF] = useState({
-    filled_at: today, odometer: '', fill_type: 'full',
-    gallons: '', cost_per_gallon: '', total_cost: '',
-    octane: vehicle?.fuel_octane || '', brand: '', notes: '',
+  const [f, setF] = useState(() => {
+    const base = {
+      filled_at: today, odometer: '', fill_type: 'full',
+      gallons: '', cost_per_gallon: '', total_cost: '',
+      octane: vehicle?.fuel_octane || '', brand: '', notes: '',
+    }
+    // Prefill from a scan: only fill fields the base leaves empty — never clobber
+    // a real default (octane, fill_type) with an empty extraction value.
+    if (initial) {
+      for (const [k, v] of Object.entries(initial)) {
+        if (k in base && v !== '' && v != null && !base[k]) base[k] = v
+      }
+    }
+    return base
   })
   const [psi, setPsi] = useState({ fl: '', fr: '', rl: '', rr: '' })
   const [showPsi, setShowPsi] = useState(false)
@@ -99,7 +171,7 @@ function FuelForm({ vehicle, lastOdo, maintItems, onDone }) {
   const save = async () => {
     setBusy(true)
     const psiVals = Object.fromEntries(Object.entries(psi).filter(([, v]) => v !== '').map(([k, v]) => [k, parseFloat(v)]))
-    const { error } = await supabase.from('fuel_logs').insert({
+    const { data: row, error } = await supabase.from('fuel_logs').insert({
       vehicle_id: vehicle.id,
       user_id: vehicle.user_id,   // fleet owner, so shared members write to the same fleet
       tire_psi: Object.keys(psiVals).length ? psiVals : null,
@@ -112,10 +184,27 @@ function FuelForm({ vehicle, lastOdo, maintItems, onDone }) {
       octane: f.octane || null,
       brand: f.brand || null,
       notes: f.notes || null,
-    })
+    }).select('id').single()
+    if (error) { setBusy(false); alert(error.message); return }
+
+    // attach the scanned receipt to the fill it produced
+    if (receipt) {
+      const { error: rerr, degraded } = await insertFuelReceipt({
+        vehicle_id: vehicle.id,
+        user_id: vehicle.user_id,
+        fuel_log_id: row.id,
+        file_path: receipt.path,
+        vendor: receipt.extracted.vendor,
+        location: receipt.extracted.location,
+        receipt_date: receipt.extracted.receipt_date,
+        total: receipt.extracted.total,
+        extracted: receipt.extracted,
+      })
+      if (rerr) alert('Fill saved, but receipt link failed: ' + rerr.message)
+      else if (degraded) showToast('FILL SAVED — receipt stored UNLINKED (run migration 0014)')
+    }
     setBusy(false)
-    if (error) { alert(error.message); return }
-    onDone(true)
+    onDone(true, !!receipt)
   }
 
   const valid = f.odometer && f.gallons && parseInt(f.odometer) > 0
@@ -123,6 +212,11 @@ function FuelForm({ vehicle, lastOdo, maintItems, onDone }) {
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
+      {receipt && (
+        <div className="note" style={{ marginBottom: 10, color: 'var(--amber)' }}>
+          ⌁ Receipt attached — fields below were read from it. Enter gallons (or $/gal) and review before saving.
+        </div>
+      )}
       <div className="frow">
         <div className="field">
           <label>Odometer {lastOdo ? `(last ${lastOdo.toLocaleString()})` : ''}</label>

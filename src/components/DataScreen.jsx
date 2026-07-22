@@ -33,6 +33,119 @@ function FeedbackCard({ me, plan, showToast }) {
   )
 }
 
+// Per-user webhook push channels (ntfy / Discord / generic). Unlike fleet data these are
+// personal — each family member adds their own on their own device (RLS: user_id = auth.uid()).
+function NotificationChannels({ me, showToast }) {
+  const [providers, setProviders] = useState([])   // null = table missing (migration 0014)
+  const [name, setName] = useState('')
+  const [type, setType] = useState('ntfy')
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const TYPES = [['ntfy', 'ntfy'], ['discord', 'Discord'], ['webhook', 'Generic webhook']]
+  const PLACEHOLDER = {
+    ntfy: 'https://ntfy.sh/motorlog-crow-fleet',
+    discord: 'https://discord.com/api/webhooks/…',
+    webhook: 'https://example.com/hook',
+  }
+
+  const load = async () => {
+    const { data, error } = await supabase.from('notification_providers').select('*').order('created_at')
+    setProviders(error ? null : data)
+  }
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const add = async () => {
+    if (!name.trim() || !url.trim()) { showToast('NAME AND URL REQUIRED'); return }
+    setBusy(true)
+    const { error } = await supabase.from('notification_providers').insert({
+      user_id: me?.id, name: name.trim(), type, config: { url: url.trim() }, enabled: true,
+    })
+    setBusy(false)
+    if (error) { showToast('ERROR: ' + error.message); return }
+    setName(''); setUrl(''); showToast('CHANNEL ADDED'); await load()
+  }
+  const toggle = async (p) => {
+    const { error } = await supabase.from('notification_providers').update({ enabled: !p.enabled }).eq('id', p.id)
+    if (error) { showToast('ERROR: ' + error.message); return }
+    await load()
+  }
+  const del = async (p) => {
+    if (!confirm(`Delete "${p.name}"?`)) return
+    await supabase.from('notification_providers').delete().eq('id', p.id)
+    await load(); showToast('DELETED')
+  }
+  const test = async (p) => {
+    setBusy(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('alerts', {
+        body: { action: 'test-provider', provider_id: p.id },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      showToast('TEST SENT — CHECK ' + p.type.toUpperCase())
+    } catch (e) { showToast('TEST FAILED: ' + e.message) }
+    setBusy(false)
+  }
+
+  if (providers === null) return (
+    <div className="card">
+      <div className="note">Notification channels not set up — run supabase/migrations/0014_reminders_notifications.sql, then reload.</div>
+    </div>
+  )
+  const trunc = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+  return (
+    <div className="card">
+      {providers.map(p => (
+        <div className="logrow" key={p.id}>
+          <div className="lmain" style={{ minWidth: 0 }}>
+            <div className="lt" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="vchip on" style={{ fontSize: 10, padding: '2px 7px', textTransform: 'uppercase', flexShrink: 0 }}>{p.type}</span>
+              <span style={trunc}>{p.name}</span>
+            </div>
+            <div className="ls" style={{ fontFamily: 'var(--font-mono)', ...trunc }}>{p.config?.url}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)', textTransform: 'none', letterSpacing: 0 }}>
+              <input type="checkbox" checked={p.enabled} onChange={() => toggle(p)} />ON
+            </label>
+            <button className="btn-sm" onClick={() => test(p)} disabled={busy}>TEST</button>
+            <button className="btn-sm danger" onClick={() => del(p)}>DEL</button>
+          </div>
+        </div>
+      ))}
+      {providers.length === 0 && (
+        <div className="note">No channels yet — add one below for phone push today (via ntfy) before the native app exists.</div>
+      )}
+      <div className="frow" style={{ marginTop: 12 }}>
+        <div className="field">
+          <label>Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Aaron's phone" />
+        </div>
+        <div className="field">
+          <label>Type</label>
+          <select value={type} onChange={e => setType(e.target.value)}>
+            {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="field">
+        <label>URL</label>
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder={PLACEHOLDER[type]} />
+      </div>
+      <button className="btn2" onClick={add} disabled={busy}>{busy ? 'WORKING…' : '+ ADD CHANNEL'}</button>
+      {type === 'ntfy' && (
+        <div className="note" style={{ marginTop: 10 }}>
+          Free push to your phone: install the ntfy app, subscribe to a topic, paste its URL here.
+        </div>
+      )}
+      <div className="note" style={{ marginTop: 10 }}>
+        Channels are personal — each family member adds their own on their own device.
+      </div>
+    </div>
+  )
+}
+
 export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems, theme, setTheme, plan, refresh, showToast }) {
   const fileRef = useRef(null)
   const [importVid, setImportVid] = useState(vehicles[0]?.id)
@@ -523,6 +636,9 @@ export default function DataScreen({ vehicles, fuelLogs, serviceLogs, maintItems
           </>
         )}
       </div>
+
+      <div className="section-label">Notification Channels</div>
+      <NotificationChannels me={me} showToast={showToast} />
 
       <div className="section-label">Beta Feedback</div>
       <FeedbackCard me={me} plan={plan} showToast={showToast} />

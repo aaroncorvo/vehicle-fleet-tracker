@@ -12,6 +12,7 @@ import TcoScreen from './components/TcoScreen.jsx'
 import ProfileScreen from './components/ProfileScreen.jsx'
 import VehicleSelect from './components/VehicleSelect.jsx'
 import GloveboxSheet from './components/GloveboxSheet.jsx'
+import NotificationBell from './components/NotificationBell.jsx'
 
 const TABS = ['Fleet', 'Vehicle', 'Fuel', 'Service', 'Maint', 'TCO', 'Settings']
 const VEHICLE_TABS = ['Vehicle', 'Fuel', 'Service', 'Maint', 'TCO']
@@ -172,10 +173,13 @@ export default function App() {
           <div className="sub">{vehicles.length} VEHICLES · TRACKED</div>
         </div>
         {vehicles.length > 0 && (
-          <button className="gbbtn" onClick={() => setGbOpen(true)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><path d="M7 14.5h5" /></svg>
-            GLOVEBOX
-          </button>
+          <div className="hdr-actions">
+            <NotificationBell vehicles={vehicles} />
+            <button className="gbbtn" onClick={() => setGbOpen(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><path d="M7 14.5h5" /></svg>
+              GLOVEBOX
+            </button>
+          </div>
         )}
       </header>
 

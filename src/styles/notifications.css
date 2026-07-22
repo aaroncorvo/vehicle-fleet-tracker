@@ -1,0 +1,116 @@
+/* ============================================================
+   NOTIFICATION INBOX — header bell + full-screen sheet.
+   Mirrors the Glovebox sheet aesthetic; all color via CSS vars
+   so light + dark themes both work. Never edit src/styles.css.
+   ============================================================ */
+
+/* ===== Header bell (icon-only, subtler than .gbbtn) ===== */
+/* .hdr .nbell beats the base `.hdr button` rule on specificity. */
+.hdr .nbell {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 32px; padding: 0;
+  background: none;
+  border: 1px solid var(--line-bright);
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.hdr .nbell svg {
+  width: 17px; height: 17px;
+  fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.hdr .nbell:hover, .hdr .nbell:active {
+  color: var(--amber);
+  border-color: rgba(255, 176, 0, 0.55);
+}
+.nbadge {
+  position: absolute; top: -7px; right: -7px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--amber); color: #191204;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-radius: 100px;
+  box-shadow: 0 0 9px rgba(255, 176, 0, 0.65);
+}
+
+/* ===== Full-screen sheet (portaled to <body>; above nav + glovebox) ===== */
+.nbsheet {
+  position: fixed; inset: 0; z-index: 92; overflow-y: auto;
+  background: var(--bg);
+  padding: calc(16px + env(safe-area-inset-top)) 18px 40px;
+  animation: nbin 0.18s var(--ease);
+}
+@keyframes nbin { from { opacity: 0; transform: translateY(14px); } }
+
+.nbsheet-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.nbsheet-title {
+  font-family: var(--font-display); font-size: 26px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--amber);
+  text-shadow: 0 0 18px rgba(255, 176, 0, 0.35);
+}
+.nbsheet-sub {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-faint); letter-spacing: 0.08em; margin-top: 4px;
+}
+.nbclose {
+  background: none; border: 1px solid var(--line-bright); color: var(--text-dim);
+  border-radius: 5px; width: 38px; height: 38px; font-size: 16px; cursor: pointer;
+  flex-shrink: 0;
+}
+.nbclose:hover, .nbclose:active { color: var(--amber); border-color: rgba(255, 176, 0, 0.5); }
+
+.nbempty {
+  text-align: center; padding: 64px 20px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-faint);
+  letter-spacing: 0.1em; line-height: 2.1;
+}
+
+/* ===== Rows — unread carries an amber left edge + faint wash ===== */
+.nbitem {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  padding: 13px 15px; margin-bottom: 9px;
+}
+.nbitem.unread {
+  border-left-color: var(--amber);
+  background: linear-gradient(90deg, rgba(255, 176, 0, 0.07), var(--panel) 42%);
+}
+.nbicon {
+  flex-shrink: 0; width: 22px; text-align: center;
+  font-size: 15px; line-height: 1.4;
+  color: var(--amber);
+}
+.nbmain { flex: 1; min-width: 0; }
+.nbtop {
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  font-family: var(--font-mono);
+}
+.nbkind {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--amber);
+}
+.nbveh {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.nbtime {
+  margin-left: auto;
+  font-size: 10px; letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.nbmsg {
+  font-family: var(--font-display);
+  font-size: 15px; line-height: 1.45; letter-spacing: 0.01em;
+  color: var(--text); margin-top: 5px;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractionToService } from './receipts.js'
+import { extractionToService, extractionToFuel, isMissingFuelLogIdColumn } from './receipts.js'
 
 // Fixture modeled on the real Discount Tire receipt (GX460, 06/30/26)
 const discountTire = {
@@ -52,5 +52,87 @@ describe('extractionToService', () => {
     expect(s.cost).toBe('')
     expect(s.parts).toBe('')
     expect(s.notes).toBe('')
+  })
+})
+
+// Fixture modeled on a typical gas-pump receipt (QuikTrip, GX460)
+const gasPump = {
+  vendor: 'QuikTrip',
+  location: '1601 S I-35 Frontage Rd, Round Rock TX 78664',
+  receipt_date: '2026-07-15',
+  total: 78.42,
+  tax: 0,
+  odometer: 91240,
+  service_type: null,
+  line_items: [
+    { description: 'Unleaded 87 — 18.671 gal @ $4.199', amount: 78.42 },
+  ],
+  payment_method: 'AMX 2000',
+  notes: 'Pump 6',
+}
+
+describe('extractionToFuel', () => {
+  const fuel = extractionToFuel(gasPump)
+
+  it('maps date, odometer, total, brand, and location', () => {
+    expect(fuel.filled_at).toBe('2026-07-15')
+    expect(fuel.odometer).toBe('91240')
+    expect(fuel.total_cost).toBe('78.42')
+    expect(fuel.brand).toBe('QuikTrip')
+    expect(fuel.location).toBe('1601 S I-35 Frontage Rd, Round Rock TX 78664')
+  })
+
+  it('never guesses gallons or $/gal — those are left to the form auto-derive', () => {
+    expect(fuel).not.toHaveProperty('gallons')
+    expect(fuel).not.toHaveProperty('cost_per_gallon')
+  })
+
+  it('returns string-shaped values ready for form state', () => {
+    expect(typeof fuel.odometer).toBe('string')
+    expect(typeof fuel.total_cost).toBe('string')
+  })
+
+  it('preserves a zero total as "0" rather than dropping it', () => {
+    expect(extractionToFuel({ total: 0 }).total_cost).toBe('0')
+    expect(extractionToFuel({ odometer: 0 }).odometer).toBe('0')
+  })
+
+  it('degrades to sensible empties on a sparse extraction', () => {
+    const f = extractionToFuel({ vendor: null, location: null, receipt_date: null, total: null, odometer: null })
+    expect(f.filled_at).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(f.odometer).toBe('')
+    expect(f.total_cost).toBe('')
+    expect(f.brand).toBe('')
+    expect(f.location).toBe('')
+  })
+
+  it('handles a completely empty extraction object', () => {
+    const f = extractionToFuel({})
+    expect(f.filled_at).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(f.odometer).toBe('')
+    expect(f.total_cost).toBe('')
+    expect(f.brand).toBe('')
+    expect(f.location).toBe('')
+  })
+})
+
+describe('isMissingFuelLogIdColumn', () => {
+  it('detects the PostgREST schema-cache miss for the new column', () => {
+    expect(isMissingFuelLogIdColumn({
+      message: "Could not find the 'fuel_log_id' column of 'receipts' in the schema cache",
+    })).toBe(true)
+  })
+
+  it('detects a Postgres "column does not exist" error', () => {
+    expect(isMissingFuelLogIdColumn({
+      message: 'column "fuel_log_id" does not exist',
+    })).toBe(true)
+  })
+
+  it('does not misfire on unrelated errors', () => {
+    expect(isMissingFuelLogIdColumn({ message: 'new row violates row-level security policy' })).toBe(false)
+    expect(isMissingFuelLogIdColumn({ message: 'permission denied for table receipts' })).toBe(false)
+    expect(isMissingFuelLogIdColumn(null)).toBe(false)
+    expect(isMissingFuelLogIdColumn({})).toBe(false)
   })
 })

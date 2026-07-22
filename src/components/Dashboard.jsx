@@ -5,12 +5,25 @@ import { photoUrls, primaryPhoto } from '../lib/vehiclePhotos.js'
 import { decodeVin } from '../lib/vin.js'
 import { PartLine } from './MaintenanceScreen.jsx'
 import { planStatus } from '../lib/plan.js'
+import { listReminders } from '../lib/reminders.js'
 
 const DAY = 86400000
 
 export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems, fixedCosts, docs, photos, recalls, plan, setVid, refresh, showToast, goTab }) {
   const [thumbs, setThumbs] = useState({})
   const [addOpen, setAddOpen] = useState(false)
+  const [reminders, setReminders] = useState([])
+
+  // Self-fetched (App.jsx is owned by another agent): reminders merge into the
+  // calendar + agenda alongside maintenance forecasts and doc expiries.
+  // Any error (e.g. 0014 not applied yet) degrades silently to no events.
+  useEffect(() => {
+    let live = true
+    listReminders().then(({ data, error }) => {
+      if (live) setReminders(error ? [] : (data || []))
+    }).catch(() => { if (live) setReminders([]) })
+    return () => { live = false }
+  }, [])
 
   // one signed-URL batch for the dashboard thumbnails
   const primaries = vehicles.map(v => primaryPhoto(photos || [], v.id)).filter(Boolean)
@@ -43,8 +56,18 @@ export default function Dashboard({ vehicles, fuelLogs, serviceLogs, maintItems,
         title: `${d.label || d.kind} expires`, basis: d.holder || null, kind: 'doc',
       }
     })
-    return [...maint, ...docEvents].sort((a, b) => a.date - b.date)
-  }, [vehicles, fuelLogs, serviceLogs, maintItems, docs])
+    const reminderEvents = reminders
+      .filter(r => !r.completed_at) // recurring roll their due_date; only non-recurring get completed_at
+      .map(r => {
+        const date = new Date(r.due_date + 'T00:00:00')
+        return {
+          date, overdue: date < today,
+          vehicle: vehicles.find(v => v.id === r.vehicle_id) || null, // null = fleet-wide
+          title: r.title, kind: 'reminder', basis: 'reminder',
+        }
+      })
+    return [...maint, ...docEvents, ...reminderEvents].sort((a, b) => a.date - b.date)
+  }, [vehicles, fuelLogs, serviceLogs, maintItems, docs, reminders])
 
   const overdueCount = events.filter(e => e.overdue).length
   const horizon = new Date(Date.now() + 90 * DAY)
